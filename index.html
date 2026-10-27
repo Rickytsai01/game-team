@@ -731,7 +731,7 @@
       padding: 20px;
     }
 
-    /* 開始畫面在手機上可上下捲動，避免選擇按鈕被視窗高度裁切 */
+    /* 手機開始畫面可上下滑動，避免遊玩版本按鈕超出畫面 */
     #start-screen {
       overflow-x: hidden;
       overflow-y: auto;
@@ -740,9 +740,7 @@
       touch-action: pan-y;
       justify-content: flex-start;
     }
-    #start-screen > * {
-      flex-shrink: 0;
-    }
+    #start-screen > * { flex-shrink: 0; }
     #start-screen > :first-child { margin-top: auto; }
     #start-screen > :last-child { margin-bottom: auto; }
 
@@ -886,7 +884,6 @@
       .backpack-grid-side { max-height: 28vh; }
       .backpack-detail-side { max-height: 28vh; }
       .platform-selector-box { flex-direction: column; }
-      /* 手機遊玩選項排在最前，減少手機使用者尋找步驟 */
       #start-screen .platform-selector-box .platform-card:nth-child(2) { order: -1; }
     }
   </style>
@@ -1451,13 +1448,6 @@ function addWall(x, z, width, depth, height = 3.6) {
 }
 
 // 依照2D地圖像素座標等比例換算至3D世界座標
-let exitSuffix = String(Math.floor(Math.random() * 100)).padStart(2, '0');
-try {
-  const lastExitCode = sessionStorage.getItem('ward13-exit-code');
-  if (`13${exitSuffix}` === lastExitCode) exitSuffix = String((Number(exitSuffix) + 1) % 100).padStart(2, '0');
-  sessionStorage.setItem('ward13-exit-code', `13${exitSuffix}`);
-} catch (error) { /* Storage may be unavailable when opened as a local file. */ }
-const exitPasscode = `13${exitSuffix}`;
 const mapX = px => -16 + (px - 40) * 0.052;
 const mapZ = py => -18 + (py - 40) * (36 / 660);
 function addMapWall(px, py, width, height, wallHeight = 3.6) {
@@ -1576,7 +1566,7 @@ createProp(
   null,
   '舊木桌',
   'note_cell',
-  '桌面深深刻著：『大門密碼前2碼是病房號碼【13】；後2碼每局改變，去院長檔案室找本局密碼單。』'
+  '桌面深深刻著：『大門密碼前2碼為病房號碼 [13]，後2碼是烈火吞噬設施的年份...』'
 );
 
 createProp(
@@ -1601,17 +1591,14 @@ createProp(
 
 createProp(
   new THREE.BoxGeometry(1.5, 2.3, 1.1),
-  new THREE.MeshStandardMaterial({ color: 0x403323, emissive: 0x241300, emissiveIntensity: 0.35, roughness: 0.9 }),
+  new THREE.MeshStandardMaterial({ color: 0x29231f, roughness: 0.9 }),
   new THREE.Vector3(mapX(980), 1.15, mapZ(160)),
   null,
-  '檔案櫃（本局大門密碼）',
+  '檔案櫃',
   'read_bookshelf',
-  `院長最新密碼單：本局出口電子鎖密碼是【${exitPasscode}】。`
+  '記載著1980年代各項人體試驗日誌... 翻閱時讓人背脊發涼。'
 );
 
-const archiveHintLight = new THREE.PointLight(0xffbb55, 0.55, 4);
-archiveHintLight.position.set(mapX(980), 2.2, mapZ(160));
-scene.add(archiveHintLight);
 createProp(
   new THREE.BoxGeometry(1.2, 2.6, 4.0),
   new THREE.MeshStandardMaterial({ color: 0x334433 }),
@@ -1841,14 +1828,6 @@ const inventoryData = [
     acquired: false,
     tag: '終局密碼',
     desc: `紫外線顯影出的血字記錄著發電機啟動順序：${generatorOrder.join(' → ')}。`
-  },
-  {
-    id: 'exitCodeNote',
-    name: '院長本局出口密碼單',
-    icon: '🗂️',
-    acquired: false,
-    tag: '出口密碼',
-    desc: `本局大門密碼：${exitPasscode}。門鎖前兩碼為病房號【13】，後兩碼依本局密碼單輸入。`
   },
   {
     id: 'doctorDeskNote',
@@ -2275,7 +2254,7 @@ const breakerState = {
   solved: false
 };
 
-const CORRECT_PASSCODE = exitPasscode;
+const CORRECT_PASSCODE = '1388';
 let keypadInput = '';
 
 function interactWithObject(obj) {
@@ -2354,12 +2333,6 @@ function interactWithObject(obj) {
     } else {
       showNoteModal('院長辦公桌', '桌上散落著1980年代精神病患試驗檔案，沒有其他鑰匙了。');
     }
-  } else if (data.action === 'read_bookshelf') {
-    const exitNote = inventoryData.find(i => i.id === 'exitCodeNote');
-    if (exitNote) exitNote.acquired = true;
-    audio.playSuccess();
-    showNoteModal('院長檔案室：本局大門密碼', data.desc);
-    showMessage(`🗂️ 找到本局出口密碼單：${exitPasscode}，已記錄至背包`);
   } else if (data.action === 'find_uv') {
     if (!player.items.uvFilter) {
       player.items.uvFilter = true;
@@ -2393,7 +2366,7 @@ function interactWithObject(obj) {
         scene.add(bloodLight);
       }
       showNoteModal('顯影的血牆', `在紫光照射下，焦黑的牆壁顯現出深紅的螢光血書：<br><br><span class="blood-text" style="font-size: 24px;">『${generatorOrder.join(' → ')}』</span><br><br>這是發電機配電箱的啟動順序！已記錄在背包中。`);
-      showMessage('🩸 已記錄本局發電機啟動順序至背包');
+      showMessage('🩸 成功破譯血牆年份密碼！已記錄至背包');
     } else if (!player.hasUV) {
       showNoteModal('焦黑的牆壁血漬', '牆壁上有奇怪的焦黑汙漬，隱約有刻痕的輪廓... 似乎需要特殊的紫外線光才能看清楚！先去廢棄藥庫找找有沒有紫外線濾鏡。');
     } else {
@@ -2824,8 +2797,6 @@ animate();
 
 </body>
 </html>
-
-
 
 
 
