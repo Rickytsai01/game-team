@@ -39,7 +39,7 @@
       height: 10px;
       transform: translate(-50%, -50%);
       pointer-events: none;
-      z-index: 12;
+      z-index: 15;
       transition: all 0.15s ease;
     }
     #crosshair::before, #crosshair::after {
@@ -58,7 +58,29 @@
       box-shadow: 0 0 8px #ffaa00;
     }
 
-    /* 手電筒光學鏡頭暗角與衰減層 (真實光束周邊漸暈) */
+    /* 真實手電筒光學光暈衰減層 (由中心向外自然漸隱衰減) */
+    #flashlight-beam {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 8;
+      background: radial-gradient(circle at 50% 50%,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(255, 250, 240, 0.96) 14%,
+        rgba(235, 225, 205, 0.72) 32%,
+        rgba(150, 140, 120, 0.38) 50%,
+        rgba(60, 55, 45, 0.15) 66%,
+        rgba(15, 12, 10, 0.04) 78%,
+        rgba(0, 0, 0, 0) 86%
+      );
+      mix-blend-mode: multiply;
+      transition: opacity 0.2s ease;
+    }
+
+    /* 外圈深邃暗角層：確保光束外的房間邊界深陷黑暗 */
     .flashlight-vignette {
       position: absolute;
       top: 0;
@@ -66,12 +88,16 @@
       width: 100%;
       height: 100%;
       pointer-events: none;
-      background: radial-gradient(circle at center, rgba(0,0,0,0) 25%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.92) 88%);
+      background: radial-gradient(circle at 50% 50%,
+        rgba(0, 0, 0, 0) 32%,
+        rgba(0, 0, 0, 0.35) 52%,
+        rgba(0, 0, 0, 0.82) 70%,
+        rgba(0, 0, 0, 0.98) 88%
+      );
       z-index: 9;
-      transition: opacity 0.25s ease;
     }
 
-    /* CRT 與恐怖噪點暗角濾鏡 */
+    /* CRT 與恐怖微粒掃描線 */
     .crt-overlay {
       position: absolute;
       top: 0;
@@ -105,7 +131,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      z-index: 15;
+      z-index: 20;
       pointer-events: none;
     }
 
@@ -162,7 +188,7 @@
       border: 1px solid rgba(150, 150, 150, 0.3);
       padding: 8px 16px;
       border-radius: 6px;
-      z-index: 15;
+      z-index: 20;
       pointer-events: none;
     }
 
@@ -216,7 +242,7 @@
       font-size: 14px;
       font-weight: bold;
       letter-spacing: 1px;
-      z-index: 15;
+      z-index: 20;
       display: none;
       pointer-events: none;
       box-shadow: 0 0 12px rgba(255, 170, 0, 0.5);
@@ -234,7 +260,7 @@
       padding: 8px 20px;
       border-radius: 4px;
       font-size: 14px;
-      z-index: 16;
+      z-index: 21;
       opacity: 0;
       transition: opacity 0.3s;
       pointer-events: none;
@@ -514,7 +540,8 @@
 
 <div id="webgl-container"></div>
 <div id="crosshair"></div>
-<div class="flashlight-vignette" id="flashlight-vignette"></div>
+<div id="flashlight-beam"></div>
+<div class="flashlight-vignette"></div>
 <div class="crt-overlay"></div>
 <div id="glitch-overlay"></div>
 
@@ -630,11 +657,11 @@
   <div class="game-subtitle">
     你在深夜甦醒，發現自己被困在陰森廢棄的 3D 第十三號精神病房。<br>
     走廊中潛伏著獵殺活人的漆黑惡靈... 逃生門將在 <b>5分鐘後</b> 永久死鎖。<br>
-    利用手電筒探索房間、收集線索殘頁、重啟高壓電閘並解鎖大門！
+    利用真實衰減手電筒探索房間、收集線索殘頁、重啟高壓電閘並解鎖大門！
   </div>
   <div style="margin-bottom: 25px; line-height: 2; font-size: 14px; color: #aaa;">
     <span class="key-badge">W</span> 前進 ｜ <span class="key-badge">S</span> 後退 ｜ 
-    <span class="key-badge">A</span> 向左平移 ｜ <span class="key-badge">D</span> 向右平移<br>
+    <span class="key-badge">A</span> 鍵向左平移 ｜ <span class="key-badge">D</span> 鍵向右平移<br>
     <span class="key-badge">滑鼠移動</span> 3D視角轉向 ｜ 
     <span class="key-badge">E</span> 鍵 調查/互動 ｜ 
     <span class="key-badge">F</span> 鍵 開關手電筒<br>
@@ -831,7 +858,7 @@ class SoundEngine {
 const audio = new SoundEngine();
 
 /* ==========================================================================
-   2. 程序化動態紋理與手電筒透鏡光斑生成 (Procedural Textures)
+   2. 程序化動態紋理生成 (Procedural Textures)
    ========================================================================== */
 function createNoiseTexture(color1, color2, isWall = false) {
   const c = document.createElement('canvas');
@@ -878,42 +905,6 @@ function createNoiseTexture(color1, color2, isWall = false) {
   return texture;
 }
 
-// 建立由中心向外自然衰減的真實手電筒透鏡光斑 (Flashlight Cookie Texture)
-function createFlashlightCookie() {
-  const c = document.createElement('canvas');
-  c.width = 512;
-  c.height = 512;
-  const ctx = c.getContext('2d');
-
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, 512, 512);
-
-  // 徑向漸層：中心亮核心 (Hotspot) -> 核心過渡區 -> 外圈泛光 (Spill) -> 漸隱為全黑
-  const grad = ctx.createRadialGradient(256, 256, 15, 256, 256, 250);
-  grad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');     // 中心最亮熱點
-  grad.addColorStop(0.25, 'rgba(255, 250, 235, 0.88)');   // 核心高光區
-  grad.addColorStop(0.55, 'rgba(240, 225, 195, 0.40)');   // 次級漫射區
-  grad.addColorStop(0.80, 'rgba(160, 140, 110, 0.12)');   // 邊緣羽化
-  grad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');           // 完全衰減
-
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(256, 256, 250, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 微弱的手電筒透鏡同心環紋理 (增加真實光學感)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
-  ctx.lineWidth = 2;
-  for (let r = 50; r < 240; r += 28) {
-    ctx.beginPath();
-    ctx.arc(256, 256, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  const texture = new THREE.CanvasTexture(c);
-  return texture;
-}
-
 const wallTex = createNoiseTexture('#34343a', '#1e1e22', true);
 wallTex.repeat.set(4, 2);
 
@@ -923,15 +914,13 @@ floorTex.repeat.set(8, 8);
 const ceilingTex = createNoiseTexture('#1a1a1e', '#111114', true);
 ceilingTex.repeat.set(6, 6);
 
-const flashlightCookie = createFlashlightCookie();
-
 /* ==========================================================================
    3. Three.js 3D 密室場景構建
    ========================================================================== */
 const container = document.getElementById('webgl-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020204);
-scene.fog = new THREE.FogExp2(0x020204, 0.075);
+scene.fog = new THREE.FogExp2(0x020204, 0.08);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(-6, 1.7, -3);
@@ -942,25 +931,31 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
-// 手電筒 1：中心聚光核心 (SpotLight 附帶 Cookie 投影，呈現中心向外強烈衰減)
-const flashlight = new THREE.SpotLight(0xfff3dc, 4.2, 30, Math.PI / 6.2, 0.85, 1.3);
-flashlight.position.set(0.18, -0.12, 0); // 右手手持微偏視角
-flashlight.target.position.set(0, 0, -1);
-flashlight.map = flashlightCookie;
+// 手電筒 1：主聚光燈 (SpotLight，中心衰減角度約 36度，筆直照射，衰減率 penumbra = 1.0 完全自然衰減)
+const flashlight = new THREE.SpotLight(0xfff6e8, 5.2, 32, Math.PI / 5.2, 1.0, 1.4);
+flashlight.position.set(0.16, -0.12, 0.1);
+flashlight.target.position.set(0, -0.05, -1);
 
-// 手電筒 2：外圈次級漫射泛光 (廣角柔和光暈，模擬真實反光杯溢光)
-const flashlightSpill = new THREE.SpotLight(0xffeacc, 1.2, 16, Math.PI / 3.6, 0.95, 2.0);
-flashlightSpill.position.set(0.18, -0.12, 0);
-flashlightSpill.target.position.set(0, 0, -1);
+// 手電筒 2：中心核心高光 (Hotspot，模擬燈泡中心強射光)
+const flashlightHotspot = new THREE.SpotLight(0xffffff, 3.2, 28, Math.PI / 10, 0.85, 1.2);
+flashlightHotspot.position.set(0.16, -0.12, 0.1);
+flashlightHotspot.target.position.set(0, -0.05, -1);
+
+// 手電筒 3：外圈微弱漫射泛光 (Spill light，模擬反光杯邊緣極弱微光)
+const flashlightSpill = new THREE.SpotLight(0xffe6c4, 0.9, 14, Math.PI / 3.4, 0.95, 2.2);
+flashlightSpill.position.set(0.16, -0.12, 0.1);
+flashlightSpill.target.position.set(0, -0.05, -1);
 
 camera.add(flashlight);
 camera.add(flashlight.target);
+camera.add(flashlightHotspot);
+camera.add(flashlightHotspot.target);
 camera.add(flashlightSpill);
 camera.add(flashlightSpill.target);
 scene.add(camera);
 
-// 微弱環境冷光 (避免完全黑死，保留輪廓)
-const ambientLight = new THREE.AmbientLight(0x040409, 0.45);
+// 微弱環境陰影冷光 (保留暗部極致黑)
+const ambientLight = new THREE.AmbientLight(0x030308, 0.35);
 scene.add(ambientLight);
 
 // 走廊緊急閃爍紅燈
@@ -1192,7 +1187,7 @@ const monster = {
 };
 
 /* ==========================================================================
-   4. 第一人稱視角控制 (Pointer Lock & 正確標準 WASD 平移)
+   4. 第一人稱視角控制 (Pointer Lock & 正確 FPS 運動方向)
    ========================================================================== */
 let isLocked = false;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -1238,14 +1233,15 @@ window.addEventListener('keydown', (e) => {
   switch (e.code) {
     case 'KeyW': case 'ArrowUp': moveForward = true; break;
     case 'KeyS': case 'ArrowDown': moveBackward = true; break;
-    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
-    case 'KeyD': case 'ArrowRight': moveRight = true; break;
+    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;   // 向左平移
+    case 'KeyD': case 'ArrowRight': moveRight = true; break; // 向右平移
     case 'KeyF':
       if (gameState === 'PLAY') {
         player.flashlightOn = !player.flashlightOn;
         flashlight.visible = player.flashlightOn;
+        flashlightHotspot.visible = player.flashlightOn;
         flashlightSpill.visible = player.flashlightOn;
-        document.getElementById('flashlight-vignette').style.opacity = player.flashlightOn ? '1' : '0.15';
+        document.getElementById('flashlight-beam').style.opacity = player.flashlightOn ? '1' : '0';
         document.getElementById('flashlight-status').innerText = player.flashlightOn ? '開啟' : '關閉';
         document.getElementById('flashlight-status').style.color = player.flashlightOn ? '#00ff66' : '#ff4444';
         audio.playBeep(player.flashlightOn ? 900 : 450, 0.05);
@@ -1390,8 +1386,11 @@ function interactWithObject(obj) {
       player.hasUV = true;
       document.getElementById('item-uvfilter').innerText = '🟣';
       document.getElementById('slot-2').classList.add('has-item');
-      flashlight.color.setHex(0xa033ff);
-      flashlightSpill.color.setHex(0x6611aa);
+      // 紫外線光斑顏色切換
+      flashlight.color.setHex(0xa64dff);
+      flashlightHotspot.color.setHex(0xdf99ff);
+      flashlightSpill.color.setHex(0x5500aa);
+      document.getElementById('flashlight-beam').style.background = 'radial-gradient(circle at 50% 50%, rgba(220,180,255,1) 0%, rgba(180,120,255,0.85) 25%, rgba(120,60,200,0.4) 50%, rgba(0,0,0,0) 80%)';
       audio.playSuccess();
       showNoteModal('紫外線紫光濾鏡', data.desc);
     } else {
@@ -1606,7 +1605,7 @@ function animate() {
 
     // 前後方向 (W=+1, S=-1)
     const forwardInput = (Number(moveForward) - Number(moveBackward));
-    // 左右方向 (D=+1, A=-1)
+    // 左右方向 (D=+1 向右, A=-1 向左)
     const strafeInput = (Number(moveRight) - Number(moveLeft));
 
     direction.z = forwardInput;
@@ -1628,7 +1627,7 @@ function animate() {
     right.y = 0;
     right.normalize();
 
-    // 位移步長向量合成
+    // 位移向量合成：W 前進、S 後退、D 向右、A 向左
     const moveStep = new THREE.Vector3()
       .addScaledVector(forward, velocity.z * delta)
       .addScaledVector(right, velocity.x * delta);
