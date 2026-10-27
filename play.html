@@ -1908,6 +1908,8 @@ function toggleBackpack() {
    ========================================================================== */
 let playMode = 'PC';
 let isLocked = false;
+let pcHadPointerLock = false;
+let lastPCMouseX = null, lastPCMouseY = null;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
 let sprintHeld = false;
 const velocity = new THREE.Vector3();
@@ -1971,21 +1973,50 @@ function setupPCControls() {
     }
   });
 
+  // Pointer Lock 可用時使用中央準星；無法鎖定時隱藏游標並保留滑鼠移動視角。
   document.addEventListener('pointerlockchange', () => {
     if (playMode !== 'PC') return;
     isLocked = document.pointerLockElement === document.body;
-    if (!isLocked && gameState === 'PLAY' && !isBackpackOpen) {
-      document.getElementById('blocker-pause').style.display = 'flex';
+    lastPCMouseX = lastPCMouseY = null;
+    if (isLocked) {
+      pcHadPointerLock = true;
+      document.body.style.cursor = 'none';
+      if (gameState === 'PAUSED') {
+        gameState = 'PLAY';
+        startTimer();
+      }
+      document.getElementById('blocker-pause').style.display = 'none';
+    } else if (pcHadPointerLock && gameState === 'PLAY' && !isBackpackOpen && !isGameModalOpen()) {
+      pausePCGame();
     } else {
+      document.getElementById('blocker-pause').style.display = 'none';
+      if (gameState === 'PLAY' && !isGameModalOpen()) document.body.style.cursor = 'none';
+    }
+  });
+
+  document.addEventListener('pointerlockerror', () => {
+    if (playMode !== 'PC') return;
+    isLocked = false;
+    if (gameState === 'PAUSED') resumePCWithoutLock();
+    else {
+      document.body.style.cursor = gameState === 'PLAY' ? 'none' : '';
       document.getElementById('blocker-pause').style.display = 'none';
     }
   });
 
   document.addEventListener('mousemove', (event) => {
-    if (playMode !== 'PC' || !isLocked || gameState !== 'PLAY' || isBackpackOpen) return;
-    const movementX = event.movementX || 0;
-    const movementY = event.movementY || 0;
-
+    if (playMode !== 'PC' || gameState !== 'PLAY' || isBackpackOpen) return;
+    let movementX = 0, movementY = 0;
+    if (isLocked) {
+      movementX = event.movementX || 0;
+      movementY = event.movementY || 0;
+      lastPCMouseX = lastPCMouseY = null;
+    } else {
+      movementX = event.movementX || (lastPCMouseX === null ? 0 : event.clientX - lastPCMouseX);
+      movementY = event.movementY || (lastPCMouseY === null ? 0 : event.clientY - lastPCMouseY);
+      lastPCMouseX = event.clientX;
+      lastPCMouseY = event.clientY;
+    }
     euler.setFromQuaternion(camera.quaternion);
     euler.y -= movementX * 0.0022;
     euler.x -= movementY * 0.0022;
@@ -2013,7 +2044,15 @@ function setupPCControls() {
       case 'KeyE': case 'Space':
         if (gameState === 'PLAY' && currentTarget) interactWithObject(currentTarget);
         break;
-      case 'Escape': closeAllModals(); break;
+      case 'Escape': {
+        const modalOpen = isBackpackOpen || isGameModalOpen();
+        if (modalOpen) closeAllModals();
+        else if (gameState === 'PLAY') {
+          if (isLocked && document.exitPointerLock) document.exitPointerLock();
+          else pausePCGame();
+        }
+        break;
+      }
     }
   });
 
@@ -2029,9 +2068,47 @@ function setupPCControls() {
   });
 }
 
+function isGameModalOpen() {
+  return Array.from(document.querySelectorAll('.modal-container'))
+    .some(modal => getComputedStyle(modal).display !== 'none');
+}
+
+function pausePCGame() {
+  if (playMode !== 'PC' || gameState !== 'PLAY' || isBackpackOpen) return;
+  gameState = 'PAUSED';
+  clearInterval(timerInterval);
+  sprintHeld = false;
+  moveForward = moveBackward = moveLeft = moveRight = false;
+  document.body.style.cursor = '';
+  document.getElementById('blocker-pause').style.display = 'flex';
+}
+
+function resumePCWithoutLock() {
+  if (playMode !== 'PC' || gameState !== 'PAUSED') return;
+  isLocked = false;
+  pcHadPointerLock = false;
+  gameState = 'PLAY';
+  document.body.style.cursor = 'none';
+  document.getElementById('blocker-pause').style.display = 'none';
+  lastPCMouseX = lastPCMouseY = null;
+  startTimer();
+}
+
 function resumePointerLock() {
-  if (playMode === 'PC' && !isBackpackOpen) {
-    document.body.requestPointerLock();
+  if (playMode !== 'PC' || gameState !== 'PAUSED' || isBackpackOpen) return;
+  try {
+    const request = document.body.requestPointerLock();
+    if (request && typeof request.then === 'function') {
+      request.then(() => {
+        if (document.pointerLockElement !== document.body) resumePCWithoutLock();
+      }).catch(resumePCWithoutLock);
+    } else {
+      setTimeout(() => {
+        if (gameState === 'PAUSED' && document.pointerLockElement !== document.body) resumePCWithoutLock();
+      }, 500);
+    }
+  } catch (error) {
+    resumePCWithoutLock();
   }
 }
 
@@ -2756,6 +2833,8 @@ function selectPlayMode(mode) {
   gameState = 'PLAY';
 
   if (playMode === 'PC') {
+    pcHadPointerLock = false;
+    document.body.style.cursor = 'none';
     setupPCControls();
     document.body.requestPointerLock();
     showMessage('💻 已啟動電腦版本：WASD 移動，點擊鎖定視角，按 [B] 開啟背包！');
