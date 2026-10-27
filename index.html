@@ -1904,6 +1904,7 @@ function toggleBackpack() {
    ========================================================================== */
 let playMode = 'PC';
 let isLocked = false;
+let lastPCMouseX = null, lastPCMouseY = null;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
 let sprintHeld = false;
 const velocity = new THREE.Vector3();
@@ -1973,10 +1974,11 @@ function setupPCControls() {
     }
   });
 
-  // PC 以 Pointer Lock 將滑鼠與畫面中央準星對齊；ESC 退出鎖定並暫停。
+  // PC 優先鎖定游標；瀏覽器拒絕時仍以隱藏游標的滑鼠移動操作。
   document.addEventListener('pointerlockchange', () => {
     if (playMode !== 'PC') return;
     isLocked = document.pointerLockElement === document.body;
+    lastPCMouseX = lastPCMouseY = null;
     if (isLocked) {
       document.body.style.cursor = 'none';
       if (gameState === 'PAUSED') {
@@ -1987,24 +1989,41 @@ function setupPCControls() {
       return;
     }
 
-    document.body.style.cursor = '';
     const modalOpen = Array.from(document.querySelectorAll('.modal-container'))
       .some(modal => getComputedStyle(modal).display !== 'none');
     if (gameState === 'PLAY' && !isBackpackOpen && !modalOpen) {
       pausePCGame();
     } else {
       document.getElementById('blocker-pause').style.display = 'none';
+      if (gameState === 'PLAY') document.body.style.cursor = 'none';
     }
   });
 
   document.addEventListener('pointerlockerror', () => {
-    if (playMode === 'PC' && gameState === 'PLAY') pausePCGame();
+    if (playMode !== 'PC') return;
+    isLocked = false;
+    if (gameState === 'PAUSED') {
+      resumePCWithoutLock();
+    } else {
+      document.body.style.cursor = gameState === 'PLAY' ? 'none' : '';
+      document.getElementById('blocker-pause').style.display = 'none';
+    }
   });
 
   document.addEventListener('mousemove', (event) => {
-    if (playMode !== 'PC' || !isLocked || gameState !== 'PLAY' || isBackpackOpen) return;
-    const movementX = event.movementX || 0;
-    const movementY = event.movementY || 0;
+    if (playMode !== 'PC' || gameState !== 'PLAY' || isBackpackOpen) return;
+    let movementX = 0;
+    let movementY = 0;
+    if (isLocked) {
+      movementX = event.movementX || 0;
+      movementY = event.movementY || 0;
+      lastPCMouseX = lastPCMouseY = null;
+    } else {
+      movementX = event.movementX || (lastPCMouseX === null ? 0 : event.clientX - lastPCMouseX);
+      movementY = event.movementY || (lastPCMouseY === null ? 0 : event.clientY - lastPCMouseY);
+      lastPCMouseX = event.clientX;
+      lastPCMouseY = event.clientY;
+    }
     euler.setFromQuaternion(camera.quaternion);
     euler.y -= movementX * 0.0022;
     euler.x -= movementY * 0.0022;
@@ -2036,7 +2055,10 @@ function setupPCControls() {
         const modalOpen = Array.from(document.querySelectorAll('.modal-container'))
           .some(modal => getComputedStyle(modal).display !== 'none');
         if (isBackpackOpen || modalOpen) closeAllModals();
-        else if (isLocked && document.exitPointerLock) document.exitPointerLock();
+        else if (gameState === 'PLAY') {
+          if (isLocked && document.exitPointerLock) document.exitPointerLock();
+          else pausePCGame();
+        }
         break;
       }
     }
@@ -2064,15 +2086,31 @@ function pausePCGame() {
   document.getElementById('blocker-pause').style.display = 'flex';
 }
 
+function resumePCWithoutLock() {
+  if (playMode !== 'PC' || gameState !== 'PAUSED') return;
+  isLocked = false;
+  gameState = 'PLAY';
+  document.body.style.cursor = 'none';
+  document.getElementById('blocker-pause').style.display = 'none';
+  lastPCMouseX = lastPCMouseY = null;
+  startTimer();
+}
+
 function resumePointerLock() {
   if (playMode !== 'PC' || gameState !== 'PAUSED' || isBackpackOpen) return;
   try {
     const request = document.body.requestPointerLock();
-    if (request && typeof request.catch === 'function') {
-      request.catch(() => { document.getElementById('blocker-pause').style.display = 'flex'; });
+    if (request && typeof request.then === 'function') {
+      request.then(() => {
+        if (document.pointerLockElement !== document.body) resumePCWithoutLock();
+      }).catch(resumePCWithoutLock);
+    } else {
+      setTimeout(() => {
+        if (gameState === 'PAUSED' && document.pointerLockElement !== document.body) resumePCWithoutLock();
+      }, 500);
     }
   } catch (error) {
-    document.getElementById('blocker-pause').style.display = 'flex';
+    resumePCWithoutLock();
   }
 }
 
@@ -2798,6 +2836,7 @@ function selectPlayMode(mode) {
   }
 
   if (playMode === 'PC') {
+    document.body.style.cursor = 'none';
     setupPCControls();
     try {
       if (document.body.requestPointerLock) document.body.requestPointerLock();
