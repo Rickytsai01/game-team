@@ -731,19 +731,6 @@
       padding: 20px;
     }
 
-    /* 手機開始畫面可上下滑動，避免遊玩版本按鈕超出畫面 */
-    #start-screen {
-      overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior-y: contain;
-      touch-action: pan-y;
-      justify-content: flex-start;
-    }
-    #start-screen > * { flex-shrink: 0; }
-    #start-screen > :first-child { margin-top: auto; }
-    #start-screen > :last-child { margin-bottom: auto; }
-
     .game-title {
       font-size: 36px;
       color: #ee2222;
@@ -884,7 +871,6 @@
       .backpack-grid-side { max-height: 28vh; }
       .backpack-detail-side { max-height: 28vh; }
       .platform-selector-box { flex-direction: column; }
-      #start-screen .platform-selector-box .platform-card:nth-child(2) { order: -1; }
     }
   </style>
 </head>
@@ -1090,12 +1076,12 @@
       <div class="card-title">電腦版本 (PC)</div>
       <div class="card-desc">
         • <b>WASD</b>：鍵盤前進、後退、向左/向右平移<br>
-        • <b>滑鼠移動</b>：游標鎖定並與中央準星同步；按 ESC 暫停<br>
+        • <b>滑鼠移動</b>：第一人稱 3D 視角轉向 (點擊鎖定)<br>
         • <b>[E]</b>：調查與拾取道具<br>
         • <b>[F]</b>：開關手電筒<br>
         • <b>[B]</b>：開啟背包與線索檢視
       </div>
-      <button type="button" class="select-btn" onclick="selectPlayMode('PC')">進入電腦版</button>
+      <button class="select-btn">進入電腦版</button>
     </div>
 
     <!-- 手機版本卡片 -->
@@ -1109,7 +1095,7 @@
         • <b>[🔦 開光] 方塊</b>：點擊開關手電筒<br>
         • <b>[🎒 背包] 方塊</b>：點擊開啟背包回顧線索
       </div>
-      <button type="button" class="select-btn" onclick="selectPlayMode('MOBILE')">進入手機版</button>
+      <button class="select-btn">進入手機版</button>
     </div>
   </div>
 
@@ -1448,6 +1434,13 @@ function addWall(x, z, width, depth, height = 3.6) {
 }
 
 // 依照2D地圖像素座標等比例換算至3D世界座標
+let exitSuffix = String(Math.floor(Math.random() * 100)).padStart(2, '0');
+try {
+  const lastExitCode = sessionStorage.getItem('ward13-exit-code');
+  if (`13${exitSuffix}` === lastExitCode) exitSuffix = String((Number(exitSuffix) + 1) % 100).padStart(2, '0');
+  sessionStorage.setItem('ward13-exit-code', `13${exitSuffix}`);
+} catch (error) { /* Storage may be unavailable when opened as a local file. */ }
+const exitPasscode = `13${exitSuffix}`;
 const mapX = px => -16 + (px - 40) * 0.052;
 const mapZ = py => -18 + (py - 40) * (36 / 660);
 function addMapWall(px, py, width, height, wallHeight = 3.6) {
@@ -1566,7 +1559,7 @@ createProp(
   null,
   '舊木桌',
   'note_cell',
-  '桌面深深刻著：『大門密碼前2碼為病房號碼 [13]，後2碼是烈火吞噬設施的年份...』'
+  '桌面深深刻著：『大門密碼前2碼是病房號碼【13】；後2碼每局改變，去院長檔案室找本局密碼單。』'
 );
 
 createProp(
@@ -1591,14 +1584,17 @@ createProp(
 
 createProp(
   new THREE.BoxGeometry(1.5, 2.3, 1.1),
-  new THREE.MeshStandardMaterial({ color: 0x29231f, roughness: 0.9 }),
+  new THREE.MeshStandardMaterial({ color: 0x403323, emissive: 0x241300, emissiveIntensity: 0.35, roughness: 0.9 }),
   new THREE.Vector3(mapX(980), 1.15, mapZ(160)),
   null,
-  '檔案櫃',
+  '檔案櫃（本局大門密碼）',
   'read_bookshelf',
-  '記載著1980年代各項人體試驗日誌... 翻閱時讓人背脊發涼。'
+  `院長最新密碼單：本局出口電子鎖密碼是【${exitPasscode}】。`
 );
 
+const archiveHintLight = new THREE.PointLight(0xffbb55, 0.55, 4);
+archiveHintLight.position.set(mapX(980), 2.2, mapZ(160));
+scene.add(archiveHintLight);
 createProp(
   new THREE.BoxGeometry(1.2, 2.6, 4.0),
   new THREE.MeshStandardMaterial({ color: 0x334433 }),
@@ -1830,6 +1826,14 @@ const inventoryData = [
     desc: `紫外線顯影出的血字記錄著發電機啟動順序：${generatorOrder.join(' → ')}。`
   },
   {
+    id: 'exitCodeNote',
+    name: '院長本局出口密碼單',
+    icon: '🗂️',
+    acquired: false,
+    tag: '出口密碼',
+    desc: `本局大門密碼：${exitPasscode}。門鎖前兩碼為病房號【13】，後兩碼依本局密碼單輸入。`
+  },
+  {
     id: 'doctorDeskNote',
     name: '院長終端紀錄',
     icon: '💻',
@@ -1904,7 +1908,6 @@ function toggleBackpack() {
    ========================================================================== */
 let playMode = 'PC';
 let isLocked = false;
-let lastPCMouseX = null, lastPCMouseY = null;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
 let sprintHeld = false;
 const velocity = new THREE.Vector3();
@@ -1956,12 +1959,6 @@ function toggleFlashlight() {
   audio.playBeep(player.flashlightOn ? 900 : 450, 0.05);
 }
 
-function isTouchDevice() {
-  const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-  const coarsePointer = window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(any-pointer: coarse)').matches);
-  return (navigator.maxTouchPoints || 0) > 0 || !!coarsePointer || mobileUserAgent || (window.innerWidth <= 700);
-}
-
 /* --- 電腦模式 (PC) 控制監聽 --- */
 function setupPCControls() {
   document.getElementById('inventory-bar').style.display = 'flex';
@@ -1974,56 +1971,21 @@ function setupPCControls() {
     }
   });
 
-  // PC 優先鎖定游標；瀏覽器拒絕時仍以隱藏游標的滑鼠移動操作。
   document.addEventListener('pointerlockchange', () => {
     if (playMode !== 'PC') return;
     isLocked = document.pointerLockElement === document.body;
-    lastPCMouseX = lastPCMouseY = null;
-    if (isLocked) {
-      document.body.style.cursor = 'none';
-      if (gameState === 'PAUSED') {
-        gameState = 'PLAY';
-        startTimer();
-      }
-      document.getElementById('blocker-pause').style.display = 'none';
-      return;
-    }
-
-    const modalOpen = Array.from(document.querySelectorAll('.modal-container'))
-      .some(modal => getComputedStyle(modal).display !== 'none');
-    if (gameState === 'PLAY' && !isBackpackOpen && !modalOpen) {
-      pausePCGame();
+    if (!isLocked && gameState === 'PLAY' && !isBackpackOpen) {
+      document.getElementById('blocker-pause').style.display = 'flex';
     } else {
-      document.getElementById('blocker-pause').style.display = 'none';
-      if (gameState === 'PLAY') document.body.style.cursor = 'none';
-    }
-  });
-
-  document.addEventListener('pointerlockerror', () => {
-    if (playMode !== 'PC') return;
-    isLocked = false;
-    if (gameState === 'PAUSED') {
-      resumePCWithoutLock();
-    } else {
-      document.body.style.cursor = gameState === 'PLAY' ? 'none' : '';
       document.getElementById('blocker-pause').style.display = 'none';
     }
   });
 
   document.addEventListener('mousemove', (event) => {
-    if (playMode !== 'PC' || gameState !== 'PLAY' || isBackpackOpen) return;
-    let movementX = 0;
-    let movementY = 0;
-    if (isLocked) {
-      movementX = event.movementX || 0;
-      movementY = event.movementY || 0;
-      lastPCMouseX = lastPCMouseY = null;
-    } else {
-      movementX = event.movementX || (lastPCMouseX === null ? 0 : event.clientX - lastPCMouseX);
-      movementY = event.movementY || (lastPCMouseY === null ? 0 : event.clientY - lastPCMouseY);
-      lastPCMouseX = event.clientX;
-      lastPCMouseY = event.clientY;
-    }
+    if (playMode !== 'PC' || !isLocked || gameState !== 'PLAY' || isBackpackOpen) return;
+    const movementX = event.movementX || 0;
+    const movementY = event.movementY || 0;
+
     euler.setFromQuaternion(camera.quaternion);
     euler.y -= movementX * 0.0022;
     euler.x -= movementY * 0.0022;
@@ -2051,16 +2013,7 @@ function setupPCControls() {
       case 'KeyE': case 'Space':
         if (gameState === 'PLAY' && currentTarget) interactWithObject(currentTarget);
         break;
-      case 'Escape': {
-        const modalOpen = Array.from(document.querySelectorAll('.modal-container'))
-          .some(modal => getComputedStyle(modal).display !== 'none');
-        if (isBackpackOpen || modalOpen) closeAllModals();
-        else if (gameState === 'PLAY') {
-          if (isLocked && document.exitPointerLock) document.exitPointerLock();
-          else pausePCGame();
-        }
-        break;
-      }
+      case 'Escape': closeAllModals(); break;
     }
   });
 
@@ -2076,41 +2029,9 @@ function setupPCControls() {
   });
 }
 
-function pausePCGame() {
-  if (playMode !== 'PC' || gameState !== 'PLAY' || isBackpackOpen) return;
-  gameState = 'PAUSED';
-  clearInterval(timerInterval);
-  sprintHeld = false;
-  moveForward = moveBackward = moveLeft = moveRight = false;
-  document.body.style.cursor = '';
-  document.getElementById('blocker-pause').style.display = 'flex';
-}
-
-function resumePCWithoutLock() {
-  if (playMode !== 'PC' || gameState !== 'PAUSED') return;
-  isLocked = false;
-  gameState = 'PLAY';
-  document.body.style.cursor = 'none';
-  document.getElementById('blocker-pause').style.display = 'none';
-  lastPCMouseX = lastPCMouseY = null;
-  startTimer();
-}
-
 function resumePointerLock() {
-  if (playMode !== 'PC' || gameState !== 'PAUSED' || isBackpackOpen) return;
-  try {
-    const request = document.body.requestPointerLock();
-    if (request && typeof request.then === 'function') {
-      request.then(() => {
-        if (document.pointerLockElement !== document.body) resumePCWithoutLock();
-      }).catch(resumePCWithoutLock);
-    } else {
-      setTimeout(() => {
-        if (gameState === 'PAUSED' && document.pointerLockElement !== document.body) resumePCWithoutLock();
-      }, 500);
-    }
-  } catch (error) {
-    resumePCWithoutLock();
+  if (playMode === 'PC' && !isBackpackOpen) {
+    document.body.requestPointerLock();
   }
 }
 
@@ -2337,7 +2258,7 @@ const breakerState = {
   solved: false
 };
 
-const CORRECT_PASSCODE = '1388';
+const CORRECT_PASSCODE = exitPasscode;
 let keypadInput = '';
 
 function interactWithObject(obj) {
@@ -2416,6 +2337,12 @@ function interactWithObject(obj) {
     } else {
       showNoteModal('院長辦公桌', '桌上散落著1980年代精神病患試驗檔案，沒有其他鑰匙了。');
     }
+  } else if (data.action === 'read_bookshelf') {
+    const exitNote = inventoryData.find(i => i.id === 'exitCodeNote');
+    if (exitNote) exitNote.acquired = true;
+    audio.playSuccess();
+    showNoteModal('院長檔案室：本局大門密碼', data.desc);
+    showMessage(`🗂️ 找到本局出口密碼單：${exitPasscode}，已記錄至背包`);
   } else if (data.action === 'find_uv') {
     if (!player.items.uvFilter) {
       player.items.uvFilter = true;
@@ -2449,7 +2376,7 @@ function interactWithObject(obj) {
         scene.add(bloodLight);
       }
       showNoteModal('顯影的血牆', `在紫光照射下，焦黑的牆壁顯現出深紅的螢光血書：<br><br><span class="blood-text" style="font-size: 24px;">『${generatorOrder.join(' → ')}』</span><br><br>這是發電機配電箱的啟動順序！已記錄在背包中。`);
-      showMessage('🩸 成功破譯血牆年份密碼！已記錄至背包');
+      showMessage('🩸 已記錄本局發電機啟動順序至背包');
     } else if (!player.hasUV) {
       showNoteModal('焦黑的牆壁血漬', '牆壁上有奇怪的焦黑汙漬，隱約有刻痕的輪廓... 似乎需要特殊的紫外線光才能看清楚！先去廢棄藥庫找找有沒有紫外線濾鏡。');
     } else {
@@ -2822,28 +2749,16 @@ function startTimer() {
    9. 首頁版本選擇啟動邏輯 (電腦版 vs 手機版 完全隔離)
    ========================================================================== */
 function selectPlayMode(mode) {
-  if (gameState !== 'START') return;
-  playMode = mode === 'PC' ? 'PC' : 'MOBILE';
+  playMode = mode;
+  audio.init();
 
-  // 先切換到遊戲，再嘗試啟動音效；不支援 Web Audio 的瀏覽器仍可遊玩。
-  const startScreen = document.getElementById('start-screen');
-  if (startScreen) startScreen.style.display = 'none';
+  document.getElementById('start-screen').style.display = 'none';
   gameState = 'PLAY';
-  try {
-    audio.init();
-  } catch (error) {
-    console.warn('音效無法啟動，遊戲將以靜音模式繼續。', error);
-  }
 
   if (playMode === 'PC') {
-    document.body.style.cursor = 'none';
     setupPCControls();
-    try {
-      if (document.body.requestPointerLock) document.body.requestPointerLock();
-    } catch (error) {
-      console.warn('滑鼠鎖定不可用，仍可使用鍵盤遊玩。', error);
-    }
-    showMessage('💻 已啟動電腦版本：WASD 移動，移動滑鼠轉向；按 [B] 開啟背包！');
+    document.body.requestPointerLock();
+    showMessage('💻 已啟動電腦版本：WASD 移動，點擊鎖定視角，按 [B] 開啟背包！');
   } else {
     setupMobileControls();
     showMessage('📱 已啟動手機版本：左下角搖桿移動，滑動視角，點擊右下方塊按鈕！');
@@ -2887,21 +2802,14 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-/* 手機或觸控裝置直接開始手機模式，避免使用者卡在版本選單。 */
-function autoStartTouchDevices() {
-  if (isTouchDevice()) selectPlayMode('MOBILE');
-}
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', autoStartTouchDevices, { once: true });
-} else {
-  autoStartTouchDevices();
-}
-
 animate();
 </script>
 
 </body>
 </html>
+
+
+
 
 
 
