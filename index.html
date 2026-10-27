@@ -1095,7 +1095,7 @@
         • <b>[F]</b>：開關手電筒<br>
         • <b>[B]</b>：開啟背包與線索檢視
       </div>
-      <button class="select-btn">進入電腦版</button>
+      <button type="button" class="select-btn" onclick="selectPlayMode('PC')">進入電腦版</button>
     </div>
 
     <!-- 手機版本卡片 -->
@@ -1109,7 +1109,7 @@
         • <b>[🔦 開光] 方塊</b>：點擊開關手電筒<br>
         • <b>[🎒 背包] 方塊</b>：點擊開啟背包回顧線索
       </div>
-      <button class="select-btn">進入手機版</button>
+      <button type="button" class="select-btn" onclick="selectPlayMode('MOBILE')">進入手機版</button>
     </div>
   </div>
 
@@ -2739,15 +2739,26 @@ function startTimer() {
    9. 首頁版本選擇啟動邏輯 (電腦版 vs 手機版 完全隔離)
    ========================================================================== */
 function selectPlayMode(mode) {
-  playMode = mode;
-  audio.init();
+  if (gameState !== 'START') return;
+  playMode = mode === 'PC' ? 'PC' : 'MOBILE';
 
-  document.getElementById('start-screen').style.display = 'none';
+  // 先切換到遊戲，再嘗試啟動音效；不支援 Web Audio 的瀏覽器仍可遊玩。
+  const startScreen = document.getElementById('start-screen');
+  if (startScreen) startScreen.style.display = 'none';
   gameState = 'PLAY';
+  try {
+    audio.init();
+  } catch (error) {
+    console.warn('音效無法啟動，遊戲將以靜音模式繼續。', error);
+  }
 
   if (playMode === 'PC') {
     setupPCControls();
-    document.body.requestPointerLock();
+    try {
+      if (document.body.requestPointerLock) document.body.requestPointerLock();
+    } catch (error) {
+      console.warn('滑鼠鎖定不可用，仍可使用鍵盤遊玩。', error);
+    }
     showMessage('💻 已啟動電腦版本：WASD 移動，點擊鎖定視角，按 [B] 開啟背包！');
   } else {
     setupMobileControls();
@@ -2791,6 +2802,19 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+/* 手機或觸控裝置直接開始手機模式，避免使用者卡在版本選單。 */
+function autoStartTouchDevices() {
+  const hasTouch = (navigator.maxTouchPoints || 0) > 0 ||
+    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const compactScreen = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+  if (hasTouch || compactScreen) selectPlayMode('MOBILE');
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', autoStartTouchDevices, { once: true });
+} else {
+  autoStartTouchDevices();
+}
 
 animate();
 </script>
