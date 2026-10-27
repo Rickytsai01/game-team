@@ -731,6 +731,21 @@
       padding: 20px;
     }
 
+    /* 開始畫面在手機上可上下捲動，避免選擇按鈕被視窗高度裁切 */
+    #start-screen {
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+      touch-action: pan-y;
+      justify-content: flex-start;
+    }
+    #start-screen > * {
+      flex-shrink: 0;
+    }
+    #start-screen > :first-child { margin-top: auto; }
+    #start-screen > :last-child { margin-bottom: auto; }
+
     .game-title {
       font-size: 36px;
       color: #ee2222;
@@ -871,6 +886,8 @@
       .backpack-grid-side { max-height: 28vh; }
       .backpack-detail-side { max-height: 28vh; }
       .platform-selector-box { flex-direction: column; }
+      /* 手機遊玩選項排在最前，減少手機使用者尋找步驟 */
+      #start-screen .platform-selector-box .platform-card:nth-child(2) { order: -1; }
     }
   </style>
 </head>
