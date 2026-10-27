@@ -1898,7 +1898,7 @@ function toggleBackpack() {
   } else {
     modal.style.display = 'none';
     if (gameState === 'PLAY' && playMode === 'PC') {
-      document.body.requestPointerLock();
+      requestPCPointerLock();
     }
   }
 }
@@ -1908,6 +1908,7 @@ function toggleBackpack() {
    ========================================================================== */
 let playMode = 'PC';
 let isLocked = false;
+let pcLockTarget = null;
 let pcHadPointerLock = false;
 let lastPCMouseX = null, lastPCMouseY = null;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -1963,6 +1964,7 @@ function toggleFlashlight() {
 
 /* --- 電腦模式 (PC) 控制監聽 --- */
 function setupPCControls() {
+  pcLockTarget = renderer.domElement;
   document.getElementById('inventory-bar').style.display = 'flex';
   document.getElementById('interaction-prompt').style.display = 'none';
   document.getElementById('backpack-hint-close').innerText = '按 [B] 或 [ESC] 關閉背包';
@@ -1976,7 +1978,7 @@ function setupPCControls() {
   // Pointer Lock 可用時使用中央準星；無法鎖定時隱藏游標並保留滑鼠移動視角。
   document.addEventListener('pointerlockchange', () => {
     if (playMode !== 'PC') return;
-    isLocked = document.pointerLockElement === document.body;
+    isLocked = document.pointerLockElement === pcLockTarget;
     lastPCMouseX = lastPCMouseY = null;
     if (isLocked) {
       pcHadPointerLock = true;
@@ -2068,6 +2070,12 @@ function setupPCControls() {
   });
 }
 
+function requestPCPointerLock() {
+  const target = pcLockTarget || (renderer && renderer.domElement) || document.body;
+  if (!target || typeof target.requestPointerLock !== 'function') return null;
+  try { return target.requestPointerLock(); } catch (error) { return null; }
+}
+
 function isGameModalOpen() {
   return Array.from(document.querySelectorAll('.modal-container'))
     .some(modal => getComputedStyle(modal).display !== 'none');
@@ -2100,7 +2108,7 @@ function resumePointerLock() {
     const request = document.body.requestPointerLock();
     if (request && typeof request.then === 'function') {
       request.then(() => {
-        if (document.pointerLockElement !== document.body) resumePCWithoutLock();
+        if (document.pointerLockElement !== pcLockTarget) resumePCWithoutLock();
       }).catch(resumePCWithoutLock);
     } else {
       setTimeout(() => {
