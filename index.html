@@ -1955,6 +1955,12 @@ function toggleFlashlight() {
   audio.playBeep(player.flashlightOn ? 900 : 450, 0.05);
 }
 
+function isTouchDevice() {
+  const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  const coarsePointer = window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(any-pointer: coarse)').matches);
+  return (navigator.maxTouchPoints || 0) > 0 || !!coarsePointer || mobileUserAgent || (window.innerWidth <= 700);
+}
+
 /* --- 電腦模式 (PC) 控制監聽 --- */
 function setupPCControls() {
   document.getElementById('inventory-bar').style.display = 'flex';
@@ -1970,7 +1976,7 @@ function setupPCControls() {
   document.addEventListener('pointerlockchange', () => {
     if (playMode !== 'PC') return;
     isLocked = document.pointerLockElement === document.body;
-    if (!isLocked && gameState === 'PLAY' && !isBackpackOpen) {
+    if (!isLocked && gameState === 'PLAY' && !isBackpackOpen && !isTouchDevice() && typeof document.body.requestPointerLock === 'function') {
       document.getElementById('blocker-pause').style.display = 'flex';
     } else {
       document.getElementById('blocker-pause').style.display = 'none';
@@ -2740,7 +2746,7 @@ function startTimer() {
    ========================================================================== */
 function selectPlayMode(mode) {
   if (gameState !== 'START') return;
-  playMode = mode === 'PC' ? 'PC' : 'MOBILE';
+  playMode = mode === 'PC' && !isTouchDevice() ? 'PC' : 'MOBILE';
 
   // 先切換到遊戲，再嘗試啟動音效；不支援 Web Audio 的瀏覽器仍可遊玩。
   const startScreen = document.getElementById('start-screen');
@@ -2805,10 +2811,7 @@ window.addEventListener('resize', () => {
 
 /* 手機或觸控裝置直接開始手機模式，避免使用者卡在版本選單。 */
 function autoStartTouchDevices() {
-  const hasTouch = (navigator.maxTouchPoints || 0) > 0 ||
-    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  const compactScreen = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
-  if (hasTouch || compactScreen) selectPlayMode('MOBILE');
+  if (isTouchDevice()) selectPlayMode('MOBILE');
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', autoStartTouchDevices, { once: true });
