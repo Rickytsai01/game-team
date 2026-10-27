@@ -1973,25 +1973,16 @@ function setupPCControls() {
     }
   });
 
-  // Pointer Lock 只是可選的滑鼠操作方式；瀏覽器拒絕鎖定時，仍可拖曳轉向，不遮住遊戲。
-  let pcLookDragging = false;
-  let pcLookLastX = 0;
-  let pcLookLastY = 0;
+  // Pointer Lock 優先提供連續視角；若瀏覽器拒絕鎖定，普通滑鼠移動仍可轉向。
+  let pcLookLastX = null;
+  let pcLookLastY = null;
 
   document.addEventListener('pointerlockchange', () => {
     if (playMode !== 'PC') return;
     isLocked = document.pointerLockElement === document.body;
+    pcLookLastX = pcLookLastY = null;
     document.getElementById('blocker-pause').style.display = 'none';
   });
-
-  document.addEventListener('mousedown', (event) => {
-    if (playMode !== 'PC' || isLocked || event.button !== 0 || gameState !== 'PLAY' || isBackpackOpen) return;
-    pcLookDragging = true;
-    pcLookLastX = event.clientX;
-    pcLookLastY = event.clientY;
-  });
-
-  document.addEventListener('mouseup', () => { pcLookDragging = false; });
 
   document.addEventListener('mousemove', (event) => {
     if (playMode !== 'PC' || gameState !== 'PLAY' || isBackpackOpen) return;
@@ -2000,13 +1991,16 @@ function setupPCControls() {
     if (isLocked) {
       movementX = event.movementX || 0;
       movementY = event.movementY || 0;
-    } else if (pcLookDragging) {
+    } else {
+      if (pcLookLastX === null || pcLookLastY === null) {
+        pcLookLastX = event.clientX;
+        pcLookLastY = event.clientY;
+        return;
+      }
       movementX = event.clientX - pcLookLastX;
       movementY = event.clientY - pcLookLastY;
       pcLookLastX = event.clientX;
       pcLookLastY = event.clientY;
-    } else {
-      return;
     }
 
     euler.setFromQuaternion(camera.quaternion);
@@ -2786,7 +2780,7 @@ function selectPlayMode(mode) {
     } catch (error) {
       console.warn('滑鼠鎖定不可用，仍可使用鍵盤遊玩。', error);
     }
-    showMessage('💻 已啟動電腦版本：WASD 移動，滑鼠轉向；若鎖定失敗，按住左鍵拖曳轉向，按 [B] 開啟背包！');
+    showMessage('💻 已啟動電腦版本：WASD 移動，移動滑鼠轉向；按 [B] 開啟背包！');
   } else {
     setupMobileControls();
     showMessage('📱 已啟動手機版本：左下角搖桿移動，滑動視角，點擊右下方塊按鈕！');
