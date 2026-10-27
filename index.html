@@ -2786,7 +2786,7 @@ function selectPlayMode(mode) {
     } catch (error) {
       console.warn('滑鼠鎖定不可用，仍可使用鍵盤遊玩。', error);
     }
-    showMessage('💻 已啟動電腦版本：WASD 移動，點擊鎖定視角，按 [B] 開啟背包！');
+    showMessage('💻 已啟動電腦版本：WASD 移動，滑鼠轉向；若鎖定失敗，按住左鍵拖曳轉向，按 [B] 開啟背包！');
   } else {
     setupMobileControls();
     showMessage('📱 已啟動手機版本：左下角搖桿移動，滑動視角，點擊右下方塊按鈕！');
