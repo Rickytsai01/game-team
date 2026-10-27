@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>十三號病房：3D午夜逃脫 (Ward 13: 3D Horror Escape)</title>
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      font-family: 'Courier New', Courier, monospace, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+      color: #eee;
+    }
+
+    #webgl-container {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    /* 準心 Crosshair */
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 10px;
+      height: 10px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 12;
+      transition: all 0.15s ease;
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255, 255, 255, 0.7);
+    }
+    #crosshair::before {
+      top: 4px; left: -6px; width: 22px; height: 2px;
+    }
+    #crosshair::after {
+      top: -6px; left: 4px; width: 2px; height: 22px;
+    }
+    #crosshair.active::before, #crosshair.active::after {
+      background: #ffcc00;
+      box-shadow: 0 0 8px #ffaa00;
+    }
+
+    /* CRT 與恐怖暗角濾鏡 */
+    .crt-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 35%, rgba(0,0,0,0.85) 90%),
+                  repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.12) 2px, transparent 2px, transparent 4px);
+      z-index: 10;
+    }
+
+    #glitch-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: rgba(180, 0, 0, 0);
+      mix-blend-mode: overlay;
+      transition: background 0.1s ease;
+      z-index: 11;
+    }
+
+    /* HUD 頂部狀態列 */
+    #hud {
+      position: absolute;
+      top: 15px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 15;
+      pointer-events: none;
+    }
+
+    .hud-box {
+      background: rgba(10, 10, 15, 0.85);
+      border: 1px solid rgba(255, 50, 50, 0.4);
+      padding: 8px 16px;
+      border-radius: 4px;
+      box-shadow: 0 0 15px rgba(255, 0, 0, 0.25);
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+
+    #timer-display {
+      font-size: 28px;
+      font-weight: bold;
+      color: #ff2222;
+      text-shadow: 0 0 12px #ff0000;
+      letter-spacing: 2px;
+      animation: pulse-timer 1s infinite alternate;
+    }
+
+    @keyframes pulse-timer {
+      0% { text-shadow: 0 0 5px #ff0000; }
+      100% { text-shadow: 0 0 18px #ff2222, 0 0 30px #aa0000; }
+    }
+
+    .sanity-bar-container {
+      width: 140px;
+      height: 12px;
+      background: #1a1a1a;
+      border: 1px solid #555;
+      margin-top: 5px;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #sanity-bar {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #ff2222, #00ff66);
+      transition: width 0.3s ease;
+    }
+
+    /* 物品快捷欄 */
+    #inventory-bar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      background: rgba(10, 10, 15, 0.85);
+      border: 1px solid rgba(150, 150, 150, 0.3);
+      padding: 8px 16px;
+      border-radius: 6px;
+      z-index: 15;
+      pointer-events: none;
+    }
+
+    .item-slot {
+      width: 48px;
+      height: 48px;
+      border: 1px dashed rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 22px;
+      position: relative;
+      background: rgba(30, 30, 35, 0.5);
+    }
+
+    .item-slot.has-item {
+      border: 1px solid #00e5ff;
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+      background: rgba(20, 35, 45, 0.7);
+    }
+
+    .item-tooltip {
+      position: absolute;
+      bottom: 54px;
+      white-space: nowrap;
+      background: #111;
+      border: 1px solid #555;
+      padding: 2px 6px;
+      font-size: 11px;
+      color: #00e5ff;
+      border-radius: 3px;
+      display: none;
+    }
+
+    .item-slot:hover .item-tooltip {
+      display: block;
+    }
+
+    /* 準心瞄準互動提示 */
+    #interaction-prompt {
+      position: absolute;
+      top: 56%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid #ffaa00;
+      color: #ffcc00;
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      z-index: 15;
+      display: none;
+      pointer-events: none;
+      box-shadow: 0 0 12px rgba(255, 170, 0, 0.5);
+    }
+
+    /* 動態訊息 */
+    #game-msg {
+      position: absolute;
+      top: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(20, 5, 5, 0.9);
+      border: 1px solid #ff4444;
+      color: #ffbbbb;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      z-index: 16;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      text-align: center;
+      max-width: 80%;
+    }
+
+    /* 彈跳視窗 (Modals) */
+    .modal-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 30;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-card {
+      background: #141416;
+      border: 2px solid #555;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 480px;
+      width: 90%;
+      color: #ddd;
+      position: relative;
+      box-shadow: 0 0 35px rgba(0, 0, 0, 0.95);
+    }
+
+    .modal-close-btn {
+      position: absolute;
+      top: 12px;
+      right: 15px;
+      background: transparent;
+      border: 1px solid #777;
+      color: #aaa;
+      font-size: 18px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .modal-close-btn:hover {
+      background: #ff3333;
+      color: #fff;
+      border-color: #ff3333;
+    }
+
+    .note-paper {
+      background: #1e1b18;
+      border: 1px solid #544432;
+      color: #d8c2a7;
+      padding: 20px;
+      font-family: 'Courier New', serif;
+      line-height: 1.6;
+      font-size: 15px;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
+      border-radius: 4px;
+    }
+
+    .blood-text {
+      color: #cc2222;
+      font-weight: bold;
+      text-shadow: 0 0 4px #770000;
+    }
+
+    /* 密碼盤 Keypad UI */
+    .keypad-display {
+      background: #0d1a0d;
+      border: 2px solid #1a4d1a;
+      color: #33ff33;
+      font-size: 32px;
+      font-family: monospace;
+      text-align: center;
+      padding: 10px;
+      letter-spacing: 8px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      box-shadow: inset 0 0 10px rgba(50, 255, 50, 0.2);
+      min-height: 55px;
+    }
+
+    .keypad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .keypad-btn {
+      background: #252528;
+      border: 1px solid #444;
+      color: #eee;
+      font-size: 22px;
+      font-weight: bold;
+      padding: 14px 0;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+
+    .keypad-btn:hover {
+      background: #383840;
+      border-color: #888;
+    }
+
+    .keypad-btn:active {
+      transform: scale(0.95);
+      background: #505058;
+    }
+
+    .btn-clear { background: #4a2020; color: #ff8888; }
+    .btn-enter { background: #1c4a20; color: #88ff88; }
+
+    /* 配電箱開關 UI */
+    .breakers-grid {
+      display: flex;
+      justify-content: space-around;
+      margin: 25px 0;
+      padding: 15px;
+      background: #0c0d10;
+      border: 1px solid #333;
+      border-radius: 6px;
+    }
+
+    .breaker-switch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .switch-lever {
+      width: 36px;
+      height: 90px;
+      background: #222;
+      border: 2px solid #555;
+      border-radius: 6px;
+      position: relative;
+      margin-bottom: 8px;
+      transition: background 0.2s;
+    }
+
+    .switch-handle {
+      width: 30px;
+      height: 36px;
+      background: #882222;
+      border-radius: 4px;
+      position: absolute;
+      top: 4px;
+      left: 1px;
+      transition: top 0.2s ease, background 0.2s;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.8);
+    }
+
+    .breaker-switch.on .switch-handle {
+      top: 46px;
+      background: #228833;
+    }
+
+    .breaker-indicator {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #440000;
+      margin-top: 6px;
+      border: 1px solid #222;
+    }
+
+    .breaker-switch.on .breaker-indicator {
+      background: #00ff44;
+      box-shadow: 0 0 8px #00ff44;
+    }
+
+    /* 全螢幕選單 */
+    .full-screen-menu {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(3, 3, 5, 0.96);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 50;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .game-title {
+      font-size: 42px;
+      color: #ee2222;
+      text-shadow: 0 0 15px #bb0000, 0 0 30px #550000;
+      margin-bottom: 15px;
+      letter-spacing: 4px;
+    }
+
+    .game-subtitle {
+      font-size: 16px;
+      color: #aaa;
+      margin-bottom: 30px;
+      max-width: 580px;
+      line-height: 1.6;
+    }
+
+    .start-btn {
+      background: #8a0c0c;
+      border: 2px solid #ff3333;
+      color: #fff;
+      font-size: 20px;
+      font-weight: bold;
+      padding: 14px 40px;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+      transition: all 0.2s;
+      letter-spacing: 2px;
+    }
+
+    .start-btn:hover {
+      background: #b51515;
+      transform: scale(1.05);
+      box-shadow: 0 0 30px rgba(255, 0, 0, 0.8);
+    }
+
+    .key-badge {
+      display: inline-block;
+      background: #333;
+      border: 1px solid #777;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 13px;
+      color: #ffaa00;
+      margin: 0 2px;
+    }
+
+    /* 驚悚跳嚇 Face */
+    #jumpscare-face {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      z-index: 100;
+      background: #000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #blocker-pause {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 25;
+      color: #fff;
+      font-size: 20px;
+      letter-spacing: 2px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div id="webgl-container"></div>
+<div id="crosshair"></div>
+<div class="crt-overlay"></div>
+<div id="glitch-overlay"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-box">
+    <div>理智度 (SANITY)</div>
+    <div class="sanity-bar-container">
+      <div id="sanity-bar"></div>
+    </div>
+  </div>
+
+  <div class="hud-box" style="text-align: center;">
+    <div style="font-size: 11px; color: #888;">剩餘逃生時間</div>
+    <div id="timer-display">05:00</div>
+  </div>
+
+  <div class="hud-box">
+    <div>手電筒 [F]: <span id="flashlight-status" style="color: #00ff66;">開啟</span></div>
+    <div style="font-size: 11px; color: #aaa; margin-top: 4px;">音效: <span id="sound-status" style="color: #00ff66;">開啟</span></div>
+  </div>
+</div>
+
+<!-- 物品欄 -->
+<div id="inventory-bar">
+  <div class="item-slot" id="slot-0"><span>🔦</span><div class="item-tooltip">手電筒 (按 F 開關)</div></div>
+  <div class="item-slot" id="slot-1"><span id="item-cellkey"></span><div class="item-tooltip">13號病房鑰匙</div></div>
+  <div class="item-slot" id="slot-2"><span id="item-uvfilter"></span><div class="item-tooltip">紫外線紫光濾鏡</div></div>
+  <div class="item-slot" id="slot-3"><span id="item-breakerkey"></span><div class="item-tooltip">配電室磁卡</div></div>
+  <div class="item-slot" id="slot-4"><span id="item-diary"></span><div class="item-tooltip">死者字條殘頁</div></div>
+</div>
+
+<!-- 互動與訊息提示 -->
+<div id="interaction-prompt">[E] 調查</div>
+<div id="game-msg">提示訊息</div>
+
+<!-- 暫停 / 點擊繼續鎖定滑鼠 -->
+<div id="blocker-pause" onclick="resumePointerLock()">
+  <div>點擊畫面繼續遊玩 (Click to Resume)</div>
+</div>
+
+<!-- 彈出視窗：字條 -->
+<div id="note-modal" class="modal-container">
+  <div class="modal-card">
+    <button class="modal-close-btn" onclick="closeAllModals()">×</button>
+    <h3 id="note-title" style="margin-bottom: 12px; color: #ff5555;">線索日誌</h3>
+    <div class="note-paper" id="note-body">
+      文件內容...
+    </div>
+  </div>
+</div>
+
+<!-- 彈出視窗：配電箱 -->
+<div id="breaker-modal" class="modal-container">
+  <div class="modal-card" style="text-align: center;">
+    <button class="modal-close-btn" onclick="closeAllModals()">×</button>
+    <h3 style="color: #ffaa00; margin-bottom: 6px;">⚡ 配電箱手動開關</h3>
+    <p style="font-size: 13px; color: #aaa;">依正確序列扳動閘門重啟主電源（順序錯誤將跳閘重置）</p>
+    
+    <div class="breakers-grid">
+      <div class="breaker-switch" id="sw-1" onclick="toggleBreaker(1)">
+        <div class="switch-lever"><div class="switch-handle"></div></div>
+        <span style="font-weight: bold;">[ 1 ]</span>
+        <div class="breaker-indicator"></div>
+      </div>
+      <div class="breaker-switch" id="sw-2" onclick="toggleBreaker(2)">
+        <div class="switch-lever"><div class="switch-handle"></div></div>
+        <span style="font-weight: bold;">[ 2 ]</span>
+        <div class="breaker-indicator"></div>
+      </div>
+      <div class="breaker-switch" id="sw-3" onclick="toggleBreaker(3)">
+        <div class="switch-lever"><div class="switch-handle"></div></div>
+        <span style="font-weight: bold;">[ 3 ]</span>
+        <div class="breaker-indicator"></div>
+      </div>
+      <div class="breaker-switch" id="sw-4" onclick="toggleBreaker(4)">
+        <div class="switch-lever"><div class="switch-handle"></div></div>
+        <span style="font-weight: bold;">[ 4 ]</span>
+        <div class="breaker-indicator"></div>
+      </div>
+    </div>
+    <div id="breaker-status-text" style="color: #ff4444; font-size: 14px;">電源狀態：斷電中</div>
+  </div>
+</div>
+
+<!-- 彈出視窗：密碼盤 -->
+<div id="keypad-modal" class="modal-container">
+  <div class="modal-card">
+    <button class="modal-close-btn" onclick="closeAllModals()">×</button>
+    <h3 style="color: #00e5ff; margin-bottom: 8px; text-align: center;">🚨 安全出口電子門鎖</h3>
+    <div class="keypad-display" id="keypad-code">____</div>
+    <div class="keypad-grid">
+      <button class="keypad-btn" onclick="pressKey('1')">1</button>
+      <button class="keypad-btn" onclick="pressKey('2')">2</button>
+      <button class="keypad-btn" onclick="pressKey('3')">3</button>
+      <button class="keypad-btn" onclick="pressKey('4')">4</button>
+      <button class="keypad-btn" onclick="pressKey('5')">5</button>
+      <button class="keypad-btn" onclick="pressKey('6')">6</button>
+      <button class="keypad-btn" onclick="pressKey('7')">7</button>
+      <button class="keypad-btn" onclick="pressKey('8')">8</button>
+      <button class="keypad-btn" onclick="pressKey('9')">9</button>
+      <button class="keypad-btn btn-clear" onclick="pressKey('C')">重設</button>
+      <button class="keypad-btn" onclick="pressKey('0')">0</button>
+      <button class="keypad-btn btn-enter" onclick="pressKey('E')">確認</button>
+    </div>
+    <div id="keypad-hint" style="text-align: center; margin-top: 15px; font-size: 12px; color: #888;">提示：輸入 4 位數密碼</div>
+  </div>
+</div>
+
+<!-- 開始選單 -->
+<div id="start-screen" class="full-screen-menu">
+  <h1 class="game-title">十三號病房：3D午夜逃脫</h1>
+  <div class="game-subtitle">
+    你在深夜甦醒，發現自己被困在陰森廢棄的 3D 第十三號精神病房。<br>
+    走廊中潛伏著獵殺活人的漆黑惡靈... 逃生門將在 <b>5分鐘後</b> 永久死鎖。<br>
+    利用手電筒探索房間、收集線索殘頁、重啟高壓電閘並解鎖大門！
+  </div>
+  <div style="margin-bottom: 25px; line-height: 2; font-size: 14px; color: #aaa;">
+    <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 移動 ｜ 
+    <span class="key-badge">滑鼠移動</span> 3D視角轉向 ｜ 
+    <span class="key-badge">E</span> 鍵 調查/互動 ｜ 
+    <span class="key-badge">F</span> 鍵 開關手電筒<br>
+    <span style="color: #ff5555;">⚠️ 當惡靈接近時，請按 [F] 關閉手電筒並保持靜止，它只會追逐光線！</span>
+  </div>
+  <button class="start-btn" onclick="startGame()">進入 3D 密室 (START)</button>
+</div>
+
+<!-- 死亡失敗畫面 -->
+<div id="gameover-screen" class="full-screen-menu" style="display: none;">
+  <h1 class="game-title" style="color: #ff0000; font-size: 50px;">你已被黑暗吞噬</h1>
+  <div class="game-subtitle" id="gameover-reason">午夜死鎖已啟動，你永遠留在了病房中...</div>
+  <button class="start-btn" onclick="location.reload()">再次挑戰</button>
+</div>
+
+<!-- 逃脫成功畫面 -->
+<div id="victory-screen" class="full-screen-menu" style="display: none;">
+  <h1 class="game-title" style="color: #00ff66;">逃出升天！</h1>
+  <div class="game-subtitle">
+    厚重冰冷的防爆鐵門在你身後轟然關閉，冷冽的新鮮空氣湧入肺腑...<br>
+    你成功在惡靈的追捕下逃離了這座地獄！<br><br>
+    <span id="escape-time-stat" style="font-size: 20px; color: #ffcc00;"></span>
+  </div>
+  <button class="start-btn" style="border-color: #00ff66; background: #0c6622;" onclick="location.reload()">重新遊玩</button>
+</div>
+
+<!-- 跳嚇面部向量 (Jump Scare) -->
+<div id="jumpscare-face">
+  <svg width="350" height="350" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="45" fill="#111" stroke="#aa0000" stroke-width="3" />
+    <circle cx="32" cy="40" r="8" fill="#ff0000" />
+    <circle cx="68" cy="40" r="8" fill="#ff0000" />
+    <circle cx="32" cy="40" r="2" fill="#fff" />
+    <circle cx="68" cy="40" r="2" fill="#fff" />
+    <path d="M 25 70 Q 50 95 75 70 Q 50 60 25 70" fill="#990000" stroke="#ff0000" stroke-width="1.5" />
+    <line x1="30" y1="67" x2="30" y2="76" stroke="#fff" stroke-width="2" />
+    <line x1="40" y1="65" x2="40" y2="80" stroke="#fff" stroke-width="2" />
+    <line x1="50" y1="64" x2="50" y2="83" stroke="#fff" stroke-width="2" />
+    <line x1="60" y1="65" x2="60" y2="80" stroke="#fff" stroke-width="2" />
+    <line x1="70" y1="67" x2="70" y2="76" stroke="#fff" stroke-width="2" />
+  </svg>
+</div>
+
+<script>
+/* ==========================================================================
+   1. 音效合成引擎 (Web Audio API Synthesizer - 零外部檔案)
+   ========================================================================== */
+class SoundEngine {
+  constructor() {
+    this.ctx = null;
+    this.ambientGain = null;
+  }
+
+  init() {
+    if (this.ctx) return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AudioCtx();
+    this.startDrone();
+  }
+
+  startDrone() {
+    if (!this.ctx) return;
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    this.ambientGain = this.ctx.createGain();
+
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(42, this.ctx.currentTime);
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(45, this.ctx.currentTime);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(130, this.ctx.currentTime);
+
+    this.ambientGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(this.ambientGain);
+    this.ambientGain.connect(this.ctx.destination);
+
+    osc1.start();
+    osc2.start();
+  }
+
+  playFootstep() {
+    if (!this.ctx) return;
+    const bufferSize = this.ctx.sampleRate * 0.05;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * 0.35;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(420, this.ctx.currentTime);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.09, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    noise.start();
+  }
+
+  playHeartbeat() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const createThump = (time, freq, gainVal) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time);
+      osc.frequency.exponentialRampToValueAtTime(25, time + 0.12);
+      gain.gain.setValueAtTime(gainVal, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(time);
+      osc.stop(time + 0.16);
+    };
+    createThump(now, 75, 0.5);
+    createThump(now + 0.18, 60, 0.38);
+  }
+
+  playBeep(freq = 800, duration = 0.08) {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  }
+
+  playClunk() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(110, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.16);
+  }
+
+  playJumpScare() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(750, this.ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(1500, this.ctx.currentTime + 0.3);
+    osc.frequency.exponentialRampToValueAtTime(140, this.ctx.currentTime + 0.9);
+
+    gain.gain.setValueAtTime(0.7, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.9);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.95);
+  }
+
+  playSuccess() {
+    if (!this.ctx) return;
+    [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.1);
+      gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.1 + 0.6);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(this.ctx.currentTime + idx * 0.1);
+      osc.stop(this.ctx.currentTime + idx * 0.1 + 0.65);
+    });
+  }
+}
+
+const audio = new SoundEngine();
+
+/* ==========================================================================
+   2. 程序化動態紋理生成 (Procedural Textures - 無需下載外部圖片)
+   ========================================================================== */
+function createNoiseTexture(color1, color2, isWall = false) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = color1;
+  ctx.fillRect(0, 0, 512, 512);
+
+  const imgData = ctx.getImageData(0, 0, 512, 512);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const noise = (Math.random() - 0.5) * 35;
+    data[i] = Math.min(255, Math.max(0, data[i] + noise));
+    data[i+1] = Math.min(255, Math.max(0, data[i+1] + noise));
+    data[i+2] = Math.min(255, Math.max(0, data[i+2] + noise));
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  if (isWall) {
+    ctx.strokeStyle = color2;
+    ctx.lineWidth = 2;
+    for (let y = 64; y < 512; y += 64) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+    }
+  } else {
+    ctx.strokeStyle = '#18181a';
+    ctx.lineWidth = 3;
+    for (let p = 128; p < 512; p += 128) {
+      ctx.beginPath();
+      ctx.moveTo(p, 0); ctx.lineTo(p, 512);
+      ctx.moveTo(0, p); ctx.lineTo(512, p);
+      ctx.stroke();
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(c);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
+const wallTex = createNoiseTexture('#34343a', '#1e1e22', true);
+wallTex.repeat.set(4, 2);
+
+const floorTex = createNoiseTexture('#222226', '#141416', false);
+floorTex.repeat.set(8, 8);
+
+const ceilingTex = createNoiseTexture('#1a1a1e', '#111114', true);
+ceilingTex.repeat.set(6, 6);
+
+/* ==========================================================================
+   3. Three.js 3D 密室場景構建
+   ========================================================================== */
+const container = document.getElementById('webgl-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020204);
+scene.fog = new THREE.FogExp2(0x020204, 0.08);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(-6, 1.7, -3);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const flashlight = new THREE.SpotLight(0xfff0dd, 2.8, 26, Math.PI / 6, 0.35, 1.2);
+flashlight.position.set(0, 0, 0);
+flashlight.target.position.set(0, 0, -1);
+camera.add(flashlight);
+camera.add(flashlight.target);
+scene.add(camera);
+
+const ambientLight = new THREE.AmbientLight(0x06060c, 0.5);
+scene.add(ambientLight);
+
+const emergencyLight = new THREE.PointLight(0xff2222, 1.8, 14);
+emergencyLight.position.set(12, 3.2, 0);
+scene.add(emergencyLight);
+
+const colliders = [];
+const interactables = [];
+
+const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.8 });
+const ceilingMat = new THREE.MeshStandardMaterial({ map: ceilingTex, roughness: 0.9 });
+const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.7 });
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 40), floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(10, 0, 0);
+scene.add(floor);
+
+const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(60, 40), ceilingMat);
+ceiling.rotation.x = Math.PI / 2;
+ceiling.position.set(10, 3.6, 0);
+scene.add(ceiling);
+
+function addWall(x, z, width, depth, height = 3.6) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), wallMat);
+  mesh.position.set(x, height / 2, z);
+  scene.add(mesh);
+  colliders.push(new THREE.Box3().setFromObject(mesh));
+  return mesh;
+}
+
+addWall(10, -18, 56, 1);
+addWall(10, 18, 56, 1);
+addWall(-16, 0, 1, 36);
+addWall(36, 0, 1, 36);
+
+addWall(-8, 0, 16, 1);
+addWall(0, -12, 1, 12);
+
+addWall(0, 12, 1, 12);
+
+addWall(10, 12, 1, 12);
+addWall(28, 9, 1, 18);
+addWall(19, 0, 18, 1);
+
+addWall(10, -12, 1, 12);
+addWall(28, -9, 1, 18);
+addWall(19, 0, 18, 1);
+
+const doors = {
+  cellDoor: {
+    mesh: null,
+    locked: true,
+    pos: new THREE.Vector3(0, 1.8, -3),
+    size: [0.3, 3.6, 6],
+    name: '13號病房鐵門',
+    keyId: 'cellDoor'
+  },
+  breakerDoor: {
+    mesh: null,
+    locked: true,
+    pos: new THREE.Vector3(0, 1.8, 3),
+    size: [0.3, 3.6, 6],
+    name: '配電室磁卡門',
+    keyId: 'breakerDoor'
+  },
+  exitDoor: {
+    mesh: null,
+    locked: true,
+    pos: new THREE.Vector3(34, 1.8, 0),
+    size: [1, 3.6, 8],
+    name: '主逃生出口防爆門',
+    keyId: 'exitDoor'
+  }
+};
+
+const doorMat = new THREE.MeshStandardMaterial({ color: 0x44444a, roughness: 0.5, metalness: 0.6 });
+for (let key in doors) {
+  const d = doors[key];
+  const m = new THREE.Mesh(new THREE.BoxGeometry(...d.size), doorMat.clone());
+  m.position.copy(d.pos);
+  scene.add(m);
+  d.mesh = m;
+  d.box = new THREE.Box3().setFromObject(m);
+  colliders.push(d.box);
+
+  m.userData = { isDoor: true, doorKey: key, name: d.name };
+  interactables.push(m);
+}
+
+function createProp(geo, mat, pos, rot, name, action, desc) {
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(pos);
+  if (rot) mesh.rotation.set(rot.x, rot.y, rot.z);
+  scene.add(mesh);
+  mesh.userData = { isInteractable: true, name, action, desc };
+  interactables.push(mesh);
+  colliders.push(new THREE.Box3().setFromObject(mesh));
+  return mesh;
+}
+
+const bedMat = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.6 });
+createProp(
+  new THREE.BoxGeometry(2.4, 0.9, 4.2),
+  bedMat,
+  new THREE.Vector3(-12, 0.45, -8),
+  null,
+  '病床',
+  'find_cell_key',
+  '一張斑駁骯髒的舊病床。你在床頭軟墊縫隙中發現了一把【生鏽的病房鑰匙】！'
+);
+
+createProp(
+  new THREE.BoxGeometry(1.6, 1.1, 1.2),
+  new THREE.MeshStandardMaterial({ color: 0x2b1e18 }),
+  new THREE.Vector3(-4, 0.55, -12),
+  null,
+  '舊木桌',
+  'note_cell',
+  '桌面深深刻著：『大門密碼前2碼為病房號碼 [13]，後2碼是烈火吞噬設施的年份...』'
+);
+
+createProp(
+  new THREE.BoxGeometry(1.8, 0.4, 1.0),
+  new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.9 }),
+  new THREE.Vector3(12, 0.2, 0),
+  null,
+  '遇難者骸骨',
+  'find_diary',
+  '骸骨手中緊緊攥著一張破損紙條：『配電箱開關順序：3號 -> 1號 -> 4號 -> 2號！』'
+);
+
+createProp(
+  new THREE.BoxGeometry(3.0, 1.2, 1.8),
+  new THREE.MeshStandardMaterial({ color: 0x3d3024 }),
+  new THREE.Vector3(19, 0.6, 12),
+  null,
+  '院長辦公桌',
+  'find_breaker_key',
+  '抽屜被撬開，裡面遺留了一張【配電室磁卡】！電腦螢幕殘留：『大門預設為隔離病房 [13] ...』'
+);
+
+createProp(
+  new THREE.BoxGeometry(1.2, 2.6, 4.0),
+  new THREE.MeshStandardMaterial({ color: 0x334433 }),
+  new THREE.Vector3(22, 1.3, -12),
+  null,
+  '藥品櫃',
+  'find_uv',
+  '你在碎玻璃瓶旁撿到了【紫外線濾鏡】！已加裝至手電筒，可照出隱藏螢光血跡！'
+);
+
+const uvWall = new THREE.Mesh(
+  new THREE.PlaneGeometry(3.5, 2.0),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1 })
+);
+uvWall.position.set(27.9, 1.8, -12);
+uvWall.rotation.y = -Math.PI / 2;
+scene.add(uvWall);
+uvWall.userData = {
+  isInteractable: true,
+  name: '斑駁焦黑的牆壁',
+  action: 'read_uv_wall',
+  desc: '肉眼只能看見焦黑的痕跡... 請開啟紫外線手電筒調查！'
+};
+interactables.push(uvWall);
+
+createProp(
+  new THREE.BoxGeometry(0.5, 1.8, 2.2),
+  new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 }),
+  new THREE.Vector3(-15.6, 1.8, 8),
+  null,
+  '高壓配電箱',
+  'open_breaker',
+  '設施備用總發電機控制開關。需要重啟電閘以供電給逃生門。'
+);
+
+createProp(
+  new THREE.BoxGeometry(0.3, 0.8, 0.6),
+  new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x003300 }),
+  new THREE.Vector3(33.4, 1.6, 4.5),
+  null,
+  '出口電子密碼鎖',
+  'open_keypad',
+  '主逃生出口電子密碼盤。'
+);
+
+const monsterGroup = new THREE.Group();
+const bodyGeo = new THREE.CylinderGeometry(0.4, 0.6, 2.2, 8);
+const bodyMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+const mBody = new THREE.Mesh(bodyGeo, bodyMat);
+mBody.position.y = 1.1;
+monsterGroup.add(mBody);
+
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat);
+eyeL.position.set(-0.16, 1.9, 0.35);
+const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat);
+eyeR.position.set(0.16, 1.9, 0.35);
+monsterGroup.add(eyeL);
+monsterGroup.add(eyeR);
+
+const eyeLight = new THREE.PointLight(0xff0000, 1.6, 4);
+eyeLight.position.set(0, 1.9, 0.4);
+monsterGroup.add(eyeLight);
+
+monsterGroup.position.set(16, 0, 0);
+scene.add(monsterGroup);
+
+const monster = {
+  group: monsterGroup,
+  speed: 3.2,
+  active: false,
+  patrolPoints: [
+    new THREE.Vector3(16, 0, 0),
+    new THREE.Vector3(5, 0, 0),
+    new THREE.Vector3(5, 0, 8),
+    new THREE.Vector3(19, 0, 8),
+    new THREE.Vector3(5, 0, -8),
+    new THREE.Vector3(19, 0, -8)
+  ],
+  patrolIdx: 0
+};
+
+/* ==========================================================================
+   4. 第一人稱視角控制 (Pointer Lock & WASD)
+   ========================================================================== */
+let isLocked = false;
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+let prevTime = performance.now();
+
+let euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+document.addEventListener('click', () => {
+  if (gameState === 'PLAY' && !isLocked) {
+    document.body.requestPointerLock();
+  }
+});
+
+document.addEventListener('pointerlockchange', () => {
+  isLocked = document.pointerLockElement === document.body;
+  if (!isLocked && gameState === 'PLAY') {
+    document.getElementById('blocker-pause').style.display = 'flex';
+  } else {
+    document.getElementById('blocker-pause').style.display = 'none';
+  }
+});
+
+function resumePointerLock() {
+  document.body.requestPointerLock();
+}
+
+document.addEventListener('mousemove', (event) => {
+  if (!isLocked || gameState !== 'PLAY') return;
+
+  const movementX = event.movementX || 0;
+  const movementY = event.movementY || 0;
+
+  euler.setFromQuaternion(camera.quaternion);
+  euler.y -= movementX * 0.0022;
+  euler.x -= movementY * 0.0022;
+  euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+});
+
+window.addEventListener('keydown', (e) => {
+  switch (e.code) {
+    case 'KeyW': case 'ArrowUp': moveForward = true; break;
+    case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+    case 'KeyD': case 'ArrowRight': moveRight = true; break;
+    case 'KeyF':
+      if (gameState === 'PLAY') {
+        player.flashlightOn = !player.flashlightOn;
+        flashlight.visible = player.flashlightOn;
+        document.getElementById('flashlight-status').innerText = player.flashlightOn ? '開啟' : '關閉';
+        document.getElementById('flashlight-status').style.color = player.flashlightOn ? '#00ff66' : '#ff4444';
+        audio.playBeep(player.flashlightOn ? 900 : 450, 0.05);
+      }
+      break;
+    case 'KeyE':
+    case 'Space':
+      if (gameState === 'PLAY' && currentTarget) {
+        interactWithObject(currentTarget);
+      }
+      break;
+    case 'Escape':
+      closeAllModals();
+      break;
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  switch (e.code) {
+    case 'KeyW': case 'ArrowUp': moveForward = false; break;
+    case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+    case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+    case 'KeyD': case 'ArrowRight': moveRight = false; break;
+  }
+});
+
+/* ==========================================================================
+   5. 射線檢測與互動系統 (Raycast Interaction)
+   ========================================================================== */
+const raycaster = new THREE.Raycaster();
+let currentTarget = null;
+
+function checkRaycast() {
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const intersects = raycaster.intersectObjects(interactables, false);
+
+  const promptEl = document.getElementById('interaction-prompt');
+  const crosshairEl = document.getElementById('crosshair');
+
+  if (intersects.length > 0 && intersects[0].distance < 3.8) {
+    currentTarget = intersects[0].object;
+    crosshairEl.classList.add('active');
+    promptEl.style.display = 'block';
+    promptEl.innerText = `[E] 調查 ${currentTarget.userData.name}`;
+  } else {
+    currentTarget = null;
+    crosshairEl.classList.remove('active');
+    promptEl.style.display = 'none';
+  }
+}
+
+let gameState = 'START';
+let timeLeft = 300;
+let timerInterval = null;
+let lastHeartbeatTime = 0;
+let stepDistance = 0;
+
+const player = {
+  sanity: 100,
+  flashlightOn: true,
+  hasUV: false,
+  items: {
+    cellKey: false,
+    uvFilter: false,
+    breakerKey: false,
+    diary: false
+  }
+};
+
+const breakerState = {
+  sequence: [false, false, false, false],
+  currentStep: 0,
+  correctOrder: [3, 1, 4, 2],
+  solved: false
+};
+
+const CORRECT_PASSCODE = '1388';
+let keypadInput = '';
+
+function interactWithObject(obj) {
+  const data = obj.userData;
+
+  if (data.isDoor) {
+    if (data.doorKey === 'cellDoor') {
+      if (player.items.cellKey) {
+        openDoorAnimation(doors.cellDoor);
+        audio.playSuccess();
+        showMessage('🔓 你用鑰匙打開了13號病房的鐵門！');
+      } else {
+        showMessage('🔒 牢房鐵門被堅固的鎖頭鎖住。在枕頭或房間附近找找看鑰匙！');
+        audio.playClunk();
+      }
+    } else if (data.doorKey === 'breakerDoor') {
+      if (player.items.breakerKey) {
+        openDoorAnimation(doors.breakerDoor);
+        audio.playSuccess();
+        showMessage('💳 磁卡刷卡成功，配電室防護門已解鎖開啟！');
+      } else {
+        showMessage('🔒 電子門鎖顯示：需要【配電室磁卡】。可能在院長辦公桌上？');
+        audio.playClunk();
+      }
+    } else if (data.doorKey === 'exitDoor') {
+      if (!breakerState.solved) {
+        showMessage('⚠️ 電源未啟動！請先前往配電室扳動總發電機電閘。');
+        audio.playClunk();
+      } else {
+        openKeypadModal();
+      }
+    }
+    return;
+  }
+
+  if (data.action === 'find_cell_key') {
+    if (!player.items.cellKey) {
+      player.items.cellKey = true;
+      document.getElementById('item-cellkey').innerText = '🗝️';
+      document.getElementById('slot-1').classList.add('has-item');
+      audio.playSuccess();
+      showNoteModal('生鏽的病房鑰匙', data.desc);
+    } else {
+      showNoteModal('凌亂的病床', '床墊下已經搜空了，沒有其他東西。');
+    }
+  } else if (data.action === 'find_diary') {
+    player.items.diary = true;
+    document.getElementById('item-diary').innerText = '📄';
+    document.getElementById('slot-4').classList.add('has-item');
+    audio.playBeep(700, 0.1);
+    showNoteModal('死者的字條', data.desc);
+  } else if (data.action === 'find_breaker_key') {
+    if (!player.items.breakerKey) {
+      player.items.breakerKey = true;
+      document.getElementById('item-breakerkey').innerText = '💳';
+      document.getElementById('slot-3').classList.add('has-item');
+      audio.playSuccess();
+      showNoteModal('院長辦公桌遺留物', data.desc);
+    } else {
+      showNoteModal('院長辦公桌', '桌上散落著1980年代精神病患試驗檔案，沒有其他鑰匙了。');
+    }
+  } else if (data.action === 'find_uv') {
+    if (!player.items.uvFilter) {
+      player.items.uvFilter = true;
+      player.hasUV = true;
+      document.getElementById('item-uvfilter').innerText = '🟣';
+      document.getElementById('slot-2').classList.add('has-item');
+      flashlight.color.setHex(0x9922ff);
+      audio.playSuccess();
+      showNoteModal('紫外線紫光濾鏡', data.desc);
+    } else {
+      showNoteModal('藥品櫃', '只剩下空的鎮靜劑玻璃安瓿瓶。');
+    }
+  } else if (data.action === 'read_uv_wall') {
+    if (player.hasUV && player.flashlightOn) {
+      showNoteModal('顯影的血牆', '在紫光照射下，焦黑的牆壁顯現出深紅的螢光血書：<br><br><span class="blood-text" style="font-size: 24px;">『1988年 烈火焚盡一切...』</span><br><br>看來密碼後兩碼就是【88】！');
+    } else {
+      showNoteModal('焦黑的牆壁', data.desc);
+    }
+  } else if (data.action === 'open_breaker') {
+    openBreakerModal();
+  } else if (data.action === 'open_keypad') {
+    if (!breakerState.solved) {
+      showMessage('⚠️ 警報：主出口電子門鎖未通電！請先恢復主配電室供電。');
+      audio.playClunk();
+    } else {
+      openKeypadModal();
+    }
+  } else {
+    showNoteModal(data.name, data.desc);
+  }
+}
+
+function openDoorAnimation(doorObj) {
+  doorObj.locked = false;
+  doorObj.mesh.position.y += 4;
+  const idx = colliders.indexOf(doorObj.box);
+  if (idx !== -1) colliders.splice(idx, 1);
+}
+
+function showMessage(msg) {
+  const el = document.getElementById('game-msg');
+  el.innerText = msg;
+  el.style.opacity = '1';
+  clearTimeout(el.timeoutId);
+  el.timeoutId = setTimeout(() => { el.style.opacity = '0'; }, 3500);
+}
+
+function showNoteModal(title, body) {
+  document.exitPointerLock();
+  document.getElementById('note-title').innerHTML = title;
+  document.getElementById('note-body').innerHTML = body;
+  document.getElementById('note-modal').style.display = 'flex';
+  audio.playBeep(650, 0.08);
+}
+
+function openBreakerModal() {
+  document.exitPointerLock();
+  document.getElementById('breaker-modal').style.display = 'flex';
+}
+
+function openKeypadModal() {
+  document.exitPointerLock();
+  keypadInput = '';
+  document.getElementById('keypad-code').innerText = '____';
+  document.getElementById('keypad-modal').style.display = 'flex';
+}
+
+function closeAllModals() {
+  document.querySelectorAll('.modal-container').forEach(m => m.style.display = 'none');
+  if (gameState === 'PLAY') {
+    document.body.requestPointerLock();
+  }
+}
+
+function toggleBreaker(num) {
+  if (breakerState.solved) return;
+  audio.playClunk();
+
+  const swEl = document.getElementById(`sw-${num}`);
+  const expected = breakerState.correctOrder[breakerState.currentStep];
+
+  if (num === expected) {
+    breakerState.sequence[num - 1] = true;
+    swEl.classList.add('on');
+    breakerState.currentStep++;
+
+    if (breakerState.currentStep === 4) {
+      breakerState.solved = true;
+      document.getElementById('breaker-status-text').innerText = '⚡ 電源重啟完成！安全出口電子門鎖已供電！';
+      document.getElementById('breaker-status-text').style.color = '#00ff66';
+      audio.playSuccess();
+      showMessage('🟢 備用發電機轟鳴運轉！大門電子鎖已通電！');
+    }
+  } else {
+    for (let i = 1; i <= 4; i++) {
+      document.getElementById(`sw-${i}`).classList.remove('on');
+      breakerState.sequence[i - 1] = false;
+    }
+    breakerState.currentStep = 0;
+    document.getElementById('breaker-status-text').innerText = '❌ 保險絲跳閘重置！請重新按正確順序扳動！';
+    document.getElementById('breaker-status-text').style.color = '#ff3333';
+    audio.playJumpScare();
+  }
+}
+
+function pressKey(val) {
+  if (val === 'C') {
+    keypadInput = '';
+    audio.playBeep(350, 0.08);
+  } else if (val === 'E') {
+    if (keypadInput === CORRECT_PASSCODE) {
+      audio.playSuccess();
+      document.getElementById('keypad-code').innerText = 'PASS';
+      document.getElementById('keypad-code').style.color = '#00ff66';
+      setTimeout(() => {
+        closeAllModals();
+        openDoorAnimation(doors.exitDoor);
+        endGame(true);
+      }, 700);
+    } else {
+      audio.playJumpScare();
+      document.getElementById('keypad-code').innerText = 'FAIL';
+      document.getElementById('keypad-code').style.color = '#ff2222';
+      setTimeout(() => {
+        keypadInput = '';
+        document.getElementById('keypad-code').innerText = '____';
+        document.getElementById('keypad-code').style.color = '#33ff33';
+      }, 800);
+    }
+    return;
+  } else {
+    if (keypadInput.length < 4) {
+      keypadInput += val;
+      audio.playBeep(700 + keypadInput.length * 80, 0.05);
+    }
+  }
+  document.getElementById('keypad-code').innerText = keypadInput.padEnd(4, '_');
+}
+
+/* ==========================================================================
+   6. 3D 惡靈 AI 與跳嚇機制
+   ========================================================================== */
+function updateMonster(delta) {
+  if (!monster.active) {
+    if (timeLeft < 270 || breakerState.solved) {
+      monster.active = true;
+      showMessage('⚠️ 走廊深處傳來沉重的拖行與低吼聲... 惡靈已甦醒！');
+    }
+    return;
+  }
+
+  const mPos = monster.group.position;
+  const pPos = camera.position;
+  const dist = mPos.distanceTo(pPos);
+
+  const glitch = document.getElementById('glitch-overlay');
+  if (dist < 10) {
+    const intensity = (1 - dist / 10);
+    glitch.style.background = `rgba(180, 0, 0, ${intensity * 0.4})`;
+  } else {
+    glitch.style.background = 'rgba(0,0,0,0)';
+  }
+
+  let target = monster.patrolPoints[monster.patrolIdx];
+  if (player.flashlightOn && dist < 14) {
+    target = pPos;
+  } else {
+    if (mPos.distanceTo(target) < 1.2) {
+      monster.patrolIdx = (monster.patrolIdx + 1) % monster.patrolPoints.length;
+    }
+  }
+
+  const dir = new THREE.Vector3().subVectors(target, mPos);
+  dir.y = 0;
+  dir.normalize();
+  mPos.addScaledVector(dir, monster.speed * delta);
+  monster.group.lookAt(target.x, mPos.y, target.z);
+
+  if (dist < 1.4) {
+    triggerJumpScare();
+  }
+}
+
+function triggerJumpScare() {
+  audio.playJumpScare();
+  document.getElementById('jumpscare-face').style.display = 'flex';
+
+  player.sanity = Math.max(0, player.sanity - 40);
+  document.getElementById('sanity-bar').style.width = `${player.sanity}%`;
+
+  monster.group.position.set(16, 0, 0);
+
+  setTimeout(() => {
+    document.getElementById('jumpscare-face').style.display = 'none';
+    if (player.sanity <= 0) {
+      endGame(false, '你的精神在極度恐懼中徹底崩潰...');
+    } else {
+      showMessage('💥 你遭受了惡靈的襲擊！按 [F] 關閉手電筒躲避它！');
+    }
+  }, 450);
+}
+
+/* ==========================================================================
+   7. 主循環與更新 (Game Loop)
+   ========================================================================== */
+function animate() {
+  requestAnimationFrame(animate);
+
+  const time = performance.now();
+  const delta = Math.min((time - prevTime) / 1000, 0.1);
+  prevTime = time;
+
+  emergencyLight.intensity = 1.0 + Math.sin(time * 0.006) * 0.8;
+
+  if (gameState === 'PLAY') {
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
+
+    direction.z = Number(moveForward) - Number(moveBackward);
+    direction.x = Number(moveRight) - Number(moveLeft);
+    direction.normalize();
+
+    if (moveForward || moveBackward) velocity.z -= direction.z * 32.0 * delta;
+    if (moveLeft || moveRight) velocity.x -= direction.x * 32.0 * delta;
+
+    const oldPos = camera.position.clone();
+
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    forward.y = 0; forward.normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    right.y = 0; right.normalize();
+
+    const moveStep = new THREE.Vector3()
+      .addScaledVector(forward, -velocity.z * delta)
+      .addScaledVector(right, velocity.x * delta);
+
+    camera.position.add(moveStep);
+
+    const playerBox = new THREE.Box3().setFromCenterAndSize(
+      camera.position,
+      new THREE.Vector3(0.6, 1.8, 0.6)
+    );
+
+    for (let box of colliders) {
+      if (playerBox.intersectsBox(box)) {
+        camera.position.copy(oldPos);
+        break;
+      }
+    }
+
+    if (moveForward || moveBackward || moveLeft || moveRight) {
+      stepDistance += delta * 12;
+      if (stepDistance > 5) {
+        audio.playFootstep();
+        stepDistance = 0;
+      }
+    }
+
+    checkRaycast();
+    updateMonster(delta);
+
+    const distToM = camera.position.distanceTo(monster.group.position);
+    let hInterval = 1.6;
+    if (distToM < 8) hInterval = 0.55;
+    if (distToM < 4) hInterval = 0.32;
+
+    const nowSec = time / 1000;
+    if (nowSec - lastHeartbeatTime > hInterval) {
+      audio.playHeartbeat();
+      lastHeartbeatTime = nowSec;
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (gameState === 'PLAY') {
+      timeLeft--;
+      const min = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+      const sec = String(timeLeft % 60).padStart(2, '0');
+      document.getElementById('timer-display').innerText = `${min}:${sec}`;
+
+      if (timeLeft === 60) {
+        showMessage('🚨 警報：設施死鎖程序即將在 60 秒後啟動！快逃！');
+        audio.playJumpScare();
+      }
+
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        endGame(false, '5分鐘已到！整座精神病院已永久密封，你永遠被困在黑暗中了...');
+      }
+    }
+  }, 1000);
+}
+
+function startGame() {
+  audio.init();
+  document.getElementById('start-screen').style.display = 'none';
+  gameState = 'PLAY';
+  document.body.requestPointerLock();
+  startTimer();
+  showMessage('逃脫開始！在5分鐘內搜集線索、啟動電源並找到大門密碼！');
+}
+
+function endGame(won, reason) {
+  gameState = won ? 'VICTORY' : 'GAMEOVER';
+  clearInterval(timerInterval);
+  document.exitPointerLock();
+
+  if (won) {
+    const elapsed = 300 - timeLeft;
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    document.getElementById('escape-time-stat').innerText = `耗時：${m} 分 ${s} 秒`;
+    document.getElementById('victory-screen').style.display = 'flex';
+  } else {
+    document.getElementById('gameover-reason').innerText = reason || '你未能逃出密室...';
+    document.getElementById('gameover-screen').style.display = 'flex';
+  }
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+</script>
+
+</body>
+</html>
