@@ -10,7 +10,7 @@ All five PBR texture sets below are downloaded as local 1K JPG maps. The HTML lo
 | Rusty Metal 02 (`rusty_metal_02`) | Doors, trim, equipment | Diffuse, OpenGL normal, roughness, AO | CC0, Poly Haven: https://polyhaven.com/a/rusty_metal_02 |
 | Old Wood Floor (`old_wood_floor`) | Shelving and wood furniture | Diffuse, OpenGL normal, roughness, AO | CC0, Poly Haven: https://polyhaven.com/a/old_wood_floor |
 
-Poly Haven publishes these asset pages with CC0 license information. Files were retrieved from the Poly Haven public files API (`https://api.polyhaven.com/files/{asset-id}`); exact file URLs, MD5s, and byte counts are recorded in `assets/ward13/pbr/asset-manifest.json`.
+Poly Haven publishes these asset pages with CC0 license information. Files were retrieved from the Poly Haven public files API (`https://api.polyhaven.com/files/{asset-id}`); exact file URLs, MD5s, and byte counts are recorded in `assets/images/ward13/pbr/asset-manifest.json`.
 
 ## Runtime/library
 
